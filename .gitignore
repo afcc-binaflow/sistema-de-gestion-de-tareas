@@ -1,0 +1,28 @@
+@'
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# Entornos y secretos
+
+.env
+.env.*
+
+# Base de datos SQLite
+*.sqlite3
+*.db
+
+# Herramientas de testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+'@ | Set-Content -LiteralPath .gitignore -Encoding ascii
