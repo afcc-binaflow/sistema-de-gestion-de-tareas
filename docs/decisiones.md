@@ -91,3 +91,29 @@ Add a new dated entry in this format:
 
 Never edit the original entry. The value of this document is the record of *why*, and that
 record is only trustworthy if it is immutable.
+
+---
+
+## 7. Revisions
+
+### D-04 revisada — 2026-10-12
+
+- **Replaces:** D-04
+- **New decision:** Every CRUD route under `/api/tareas` still requires a valid token, and data
+  is still isolated per owner. `GET /tareas`, the welcome page, is **public**: it carries no
+  user data, so there is nothing on it to protect.
+- **Why the original no longer holds:** The original gated *both* representations of `/tareas`
+  with a single rule. The Phase 0.3 testability review (finding F-01) showed that rule is
+  unsatisfiable for the HTML representation: a browser navigation cannot send an
+  `Authorization` header, so a token-gated HTML page is reachable only by `curl`. The
+  requirement contradicted its own intent — a page for a person to open — and its own evidence
+  plan, which asked for a browser capture (E-04). Only the sub-clause about the HTML page
+  changed. The isolation rule was never in question: a *welcome* page with no data on it
+  protects nothing by being gated.
+- **Alternatives rejected:** A cookie set at login alongside the header — works in a browser,
+  but adds `HttpOnly`/`Secure`/`SameSite` surface and session tests the brief never asks for,
+  against the non-goals in D-17. Keeping the rule and changing the evidence to a `curl`
+  capture — cheapest in code, but ships a page no person can open, which is visible in a graded
+  deliverable.
+- **Closes:** F-01. Affects RF-09 (rewritten), TP-21 (its HTML half inverts: 200 **without** a
+  token, and the body must carry no task data).

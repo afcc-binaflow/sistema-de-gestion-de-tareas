@@ -9,7 +9,7 @@ contract, the test suite, the traceability matrix, and commit messages.
 | Phase | Use |
 |---|---|
 | 0.2 | Decisions referenced here (`D-xx`) are consolidated into `docs/decisiones.md` |
-| 0.3 | Testability review runs over this table, requirement by requirement |
+| 0.3 | Testability review runs over this table, requirement by requirement. Findings and corrections: `docs/revision-testabilidad.md` |
 | 0.4 | Priority column feeds the risk matrix |
 | 1.2 | `docs/api.md` must satisfy every RF in the "Verification" column |
 | 9.2 | Traceability matrix requires every RF to map to at least one test |
@@ -27,23 +27,23 @@ walked through the analysis in Phase 0.2 and consolidated in `docs/decisiones.md
 
 | ID | Requirement | Source | Verification | TP | Prio |
 |---|---|---|---|---|---|
-| RF-01 | The API accepts `POST /registro` with a JSON body containing the string fields `usuario` and `contraseña`. | CONSIGNA | Integration: valid body → 201 | TP-02 | P1 |
+| RF-01 | The API accepts `POST /registro` with a JSON body containing the string fields `usuario` and `contraseña`. A body missing either field, or where either field is not a string, is rejected with 400. | CONSIGNA | Valid body → 201; missing field and non-string field → 400 | TP-02 | P1 |
 | RF-02 | A successful registration persists the user with the password stored as a hash produced by the hashing library. The plaintext password is never persisted in any column. | CONSIGNA, D-14 | Inspect `usuarios.password_hash` in the DB; assert it differs from the input | TP-04 | P1 |
 | RF-03 | `usuario` is unique and the comparison is case-insensitive: registering `juan` when `Juan` already exists is rejected with 409. | D-11 | Integration → 409; DAO → `IntegrityError` | TP-03, TP-19 | P1 |
 | RF-04 | The `/registro` response body never contains the password or its hash. | CONSIGNA (implied), RNF-06 | Assert response keys; search body for the plaintext and the hash | TP-05 | P1 |
-| RF-05 | The API accepts `POST /login` with `usuario` and `contraseña` and returns 200 with a token when the credentials match a stored user. | CONSIGNA | Integration: valid credentials → 200 + non-empty token | TP-06 | P1 |
+| RF-05 | The API accepts `POST /login` with `usuario` and `contraseña` and returns 200 with the token in a JSON field named `token` when the credentials match a stored user. | CONSIGNA | Valid credentials → 200 and a non-empty `token` field | TP-06, TP-17 | P1 |
 | RF-06 | When the user does not exist, and when the password is wrong, `/login` returns 401 with a **byte-identical** body in both cases. | D-09, RNF-06 | Two tests, bodies compared for equality | TP-07 | P1 |
 | RF-07 | The token issued by `/login` is a JWT signed with the server's `SECRET_KEY`, carrying `sub` (user id as a string), `iat` and `exp` (8 hours after issue, D-20). | D-03, D-20 | Unit: decode → claims present and signature valid | TP-08, TP-09 | P1 |
 | RF-08 | Any request to a protected route with a missing, malformed, tampered, or expired token is rejected with 401. | D-04, D-09 | Integration with four token variants | TP-08, TP-09, TP-10 | P1 |
-| RF-09 | `GET /tareas` returns a welcome HTML document (`text/html`) and requires a valid token. | CONSIGNA, D-06 | No token → 401; valid token → 200 + `text/html` | TP-21 | P2 |
-| RF-10 | The API exposes the task CRUD as JSON under `/api/tareas`: create (`POST /api/tareas`), list own (`GET /api/tareas`), read one (`GET /api/tareas/<id>`), update (`PUT /api/tareas/<id>`), delete (`DELETE /api/tareas/<id>`). | D-01, D-06 | Integration: full create→list→read→update→delete cycle | TP-13 | P2 |
+| RF-09 | `GET /tareas` returns a **public** welcome HTML document (`text/html`), with no authentication and no user data on it (D-04 revisada). | CONSIGNA, D-06, D-04 revisada | Without any header → 200 + `text/html`; the body carries no task data | TP-21 | P2 |
+| RF-10 | The API exposes the task CRUD as JSON under `/api/tareas`: create (`POST /api/tareas`), list own (`GET /api/tareas`), read one (`GET /api/tareas/<id>`), update (`PUT /api/tareas/<id>`), delete (`DELETE /api/tareas/<id>`). Create and update accept `{"titulo": <string>}` and optionally `completada` (boolean, default false). A task in a response is `{"id", "titulo", "completada"}`; the owner id is never exposed. | D-01, D-06 | Full create→list→read→update→delete cycle; assert the exact response keys | TP-13, TP-17 | P2 |
 | RF-11 | `GET /api/tareas` returns only the tasks owned by the authenticated user. | D-04 | Two users create tasks; each list contains only its own | TP-11 | P1 |
 | RF-12 | Reading, updating, or deleting a task owned by another user returns 404, even though that task exists. | D-07 | A targets B's task via GET, PUT and DELETE → 404 | TP-11 | P1 |
 | RF-13 | A task requires a non-empty `titulo` of at most 200 characters (D-19). A missing, empty, over-length, or non-string value is rejected with 400. | CONSIGNA (implied), D-19 | Four invalid bodies → 400 | TP-12 | P2 |
-| RF-14 | Every error response uses the same JSON shape `{"error": "<mensaje>"}` with `Content-Type: application/json`, for 400, 401, 404, 405, 409, 415 and 500. | R-04, D-09 | Parameterized test over each status code | TP-16, TP-22 | P2 |
+| RF-14 | Every error response uses the same JSON shape `{"error": "<mensaje>"}` with `Content-Type: application/json`, for 400, 401, 404, 405, 409 and 500. | R-04, D-09 | Parameterized test over each status code | TP-16, TP-22 | P2 |
 | RF-15 | A malformed JSON body, or a JSON endpoint called without a JSON `Content-Type`, returns 400 — never a 500 and never an HTML error page. | R-07, D-12 | Malformed body and missing header → 400 | TP-18 | P2 |
 | RF-16 | The console client can register, log in, and perform the full task CRUD against the API, keeping the token in memory for the session only. | D-05, D-17 | E2E test against the app test client | TP-17 | P2 |
-| RF-17 | The console client reports network failures and HTTP error codes as readable messages, never printing a stack trace. | D-17 | E2E with the API unreachable | TP-17 | P2 |
+| RF-17 | On a network failure or an HTTP error, the console client prints one line naming the failure — the HTTP status code together with the API's `error` value, or the network failure itself — and exits with a non-zero code. It never prints a traceback and never fails silently. | D-17 | E2E with the API unreachable; forced 400 and 401 responses | TP-17 | P2 |
 
 ---
 
@@ -79,7 +79,7 @@ Requirement IDs are separate from RF/RNF: these are hand-in items, not system be
 | DEL-01 | `servidor.py` — Flask API plus SQLite. It exists as the runnable entry point. | CONSIGNA | E-03; see A-04 |
 | DEL-02 | Console client. | D-05 | E-05 |
 | DEL-03 | `README.md` with instructions to run and test the project. | CONSIGNA | E-01, 10.3 walkthrough |
-| DEL-04 | Screenshots of successful tests. | CONSIGNA | E-01, E-02, E-03, E-04, E-05, E-06, E-07 |
+| DEL-04 | Screenshots of successful tests, per the evidence plan (E-01 … E-08). Each capture carries the command that produced it. | CONSIGNA | E-01, E-02, E-03, E-04, E-05, E-06, E-07, E-08 |
 | DEL-05 | Repository published on GitHub. | CONSIGNA | Repo URL |
 | DEL-06 | Project hosted on GitHub Pages. | CONSIGNA | E-08 for the static site |
 | DEL-07 | Written answers: why hash passwords, and the advantages of SQLite here. | CONSIGNA | `docs/respuestas-conceptuales.md` |
