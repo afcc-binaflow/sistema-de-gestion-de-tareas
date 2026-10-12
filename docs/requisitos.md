@@ -33,13 +33,13 @@ walked through the analysis in Phase 0.2 and consolidated in `docs/decisiones.md
 | RF-04 | The `/registro` response body never contains the password or its hash. | CONSIGNA (implied), RNF-06 | Assert response keys; search body for the plaintext and the hash | TP-05 | P1 |
 | RF-05 | The API accepts `POST /login` with `usuario` and `contraseña` and returns 200 with a token when the credentials match a stored user. | CONSIGNA | Integration: valid credentials → 200 + non-empty token | TP-06 | P1 |
 | RF-06 | When the user does not exist, and when the password is wrong, `/login` returns 401 with a **byte-identical** body in both cases. | D-09, RNF-06 | Two tests, bodies compared for equality | TP-07 | P1 |
-| RF-07 | The token issued by `/login` is a JWT signed with the server's `SECRET_KEY`, carrying `sub` (user id as a string), `iat` and `exp`. | D-03 | Unit: decode → claims present and signature valid | TP-08, TP-09 | P1 |
+| RF-07 | The token issued by `/login` is a JWT signed with the server's `SECRET_KEY`, carrying `sub` (user id as a string), `iat` and `exp` (8 hours after issue, D-20). | D-03, D-20 | Unit: decode → claims present and signature valid | TP-08, TP-09 | P1 |
 | RF-08 | Any request to a protected route with a missing, malformed, tampered, or expired token is rejected with 401. | D-04, D-09 | Integration with four token variants | TP-08, TP-09, TP-10 | P1 |
 | RF-09 | `GET /tareas` returns a welcome HTML document (`text/html`) and requires a valid token. | CONSIGNA, D-06 | No token → 401; valid token → 200 + `text/html` | TP-21 | P2 |
 | RF-10 | The API exposes the task CRUD as JSON under `/api/tareas`: create (`POST /api/tareas`), list own (`GET /api/tareas`), read one (`GET /api/tareas/<id>`), update (`PUT /api/tareas/<id>`), delete (`DELETE /api/tareas/<id>`). | D-01, D-06 | Integration: full create→list→read→update→delete cycle | TP-13 | P2 |
 | RF-11 | `GET /api/tareas` returns only the tasks owned by the authenticated user. | D-04 | Two users create tasks; each list contains only its own | TP-11 | P1 |
 | RF-12 | Reading, updating, or deleting a task owned by another user returns 404, even though that task exists. | D-07 | A targets B's task via GET, PUT and DELETE → 404 | TP-11 | P1 |
-| RF-13 | A task requires a non-empty `titulo`. A missing, empty, or non-string value is rejected with 400. | CONSIGNA (implied) | Three invalid bodies → 400 | TP-12 | P2 |
+| RF-13 | A task requires a non-empty `titulo` of at most 200 characters (D-19). A missing, empty, over-length, or non-string value is rejected with 400. | CONSIGNA (implied), D-19 | Four invalid bodies → 400 | TP-12 | P2 |
 | RF-14 | Every error response uses the same JSON shape `{"error": "<mensaje>"}` with `Content-Type: application/json`, for 400, 401, 404, 405, 409, 415 and 500. | R-04, D-09 | Parameterized test over each status code | TP-16, TP-22 | P2 |
 | RF-15 | A malformed JSON body, or a JSON endpoint called without a JSON `Content-Type`, returns 400 — never a 500 and never an HTML error page. | R-07, D-12 | Malformed body and missing header → 400 | TP-18 | P2 |
 | RF-16 | The console client can register, log in, and perform the full task CRUD against the API, keeping the token in memory for the session only. | D-05, D-17 | E2E test against the app test client | TP-17 | P2 |
@@ -98,21 +98,25 @@ Docker · caching · background jobs · async · admin panel · `PATCH` semantic
 
 ---
 
-## Assumptions and unresolved values
+## Previously open values (resolved in Phase 0.2)
 
-These are deliberately left open. They are the input for the Phase 0.3 testability review,
-which must either resolve them or return them to Phase 0.2 as a decision.
+These were deliberately left open in Phase 0.1. Phase 0.2 closed all of them; the decision
+that resolved each one is recorded in `docs/decisiones.md` with its rationale.
 
-| ID | Item | Status |
+| ID | Item | Resolution |
 |---|---|---|
-| A-01 | Maximum `titulo` length is not fixed. RF-13 requires rejecting invalid values but no numeric limit exists yet. | Open — needs a number |
-| A-02 | Password policy: only "non-empty" is enforced (D-14), so that the assignment's own example password `1234` keeps working. Any minimum-length rule would break RF-01 as demonstrated in the brief. | Decided, re-check in 0.3 |
-| A-03 | `usuario` whitespace handling is not decided: is `"  juan  "` normalized by stripping, or rejected, or treated as distinct? Affects RF-03. | Open |
-| A-04 | `servidor.py` is the entry point, while SRP (RNF-11) requires separate modules. Keeping the entry point named exactly as the brief demands while the logic lives in modules satisfies both. | Needs confirmation in 0.2 |
-| A-05 | Token lifetime (`exp` offset) is not fixed. RF-07 and RNF-09 require an expiry but not a value. | Open — needs a number |
-| A-06 | `completada` on a task is introduced by D-01 but is never mentioned in the brief. It must be justified or dropped (YAGNI). | Open |
-| A-07 | `DELETE` returns 204 with an empty body. Decided, but must be written into `docs/api.md` so the client implements it correctly. | Decided, document in 1.2 |
-| A-08 | Trailing-slash behaviour (`/tareas` vs `/tareas/`) is not decided. Flask treats them differently, and an inconsistent contract is a real client-side defect. | Open |
+| A-01 | Maximum `titulo` length | **D-19** — 200 characters |
+| A-02 | Password policy | **D-14** — non-empty only, so the brief's `1234` example keeps working |
+| A-03 | `usuario` whitespace handling | **D-21** — `usuario` is stripped; `contraseña` is never stripped |
+| A-04 | `servidor.py` entry point vs. separated responsibilities | **D-18** — the entry point composes separate modules |
+| A-05 | Token lifetime | **D-20** — 8 hours |
+| A-06 | `completada` goes beyond the brief | **D-22** — kept; must be declared in the README |
+| A-07 | `DELETE` returns 204 with an empty body | **D-23** — confirmed; materialised in `docs/api.md` (Phase 1.2) |
+| A-08 | Trailing-slash behaviour | **D-23** — strict, one documented behaviour |
+
+The Phase 0.3 testability review no longer has open values to resolve. Its job is now to
+review the requirement statements themselves — clarity, measurability, reachability and
+consistency — and to return any defective requirement to Phase 0.2.
 
 ---
 
