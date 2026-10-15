@@ -1,0 +1,11 @@
+# Normalize line endings in the repository, independent of each contributor's
+# core.autocrlf setting.
+#
+# Without this file, a contributor whose core.autocrlf is false on Windows
+# commits CRLF, and the Linux checkout (the PythonAnywhere deployment, D-08)
+# receives CRLF. Verified in a scratch repository on git 2.55.0: the same file
+# is stored as i/crlf without this rule and i/lf with it.
+#
+# `text=auto` lets git decide per file, so files it detects as binary are left
+# byte-for-byte alone. That is what keeps the DEL-04 evidence screenshots intact.
+* text=auto
