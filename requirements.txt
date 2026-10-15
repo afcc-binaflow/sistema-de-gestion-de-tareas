@@ -1,0 +1,68 @@
+# Runtime and dependencies of the PFO 2 task API.
+#
+# ── Python version: 3.13 ──────────────────────────────────────────────────────
+#
+# The API runs on PythonAnywhere (D-08, DEL-08). Its newest system image, "innit",
+# supports up to Python 3.13 — it has no 3.14 at all. Targeting the development
+# machine's default interpreter instead would build something the deployment
+# cannot run, so 3.13 is the version this project declares, and the version the
+# virtualenv of Phase 2.1 must be created with.
+#
+# Verified against Python 3.13.14 before this file was written: all four packages
+# below install cleanly into an empty virtualenv, werkzeug's default scrypt
+# hashing works, and the four modules committed in Phase 1 parse unchanged. The
+# development machine also carries Python 3.14.6, which is newer than the target
+# and therefore not what this file describes.
+#
+# ── Why versions are pinned ───────────────────────────────────────────────────
+#
+# An unpinned dependency is how "it works on my machine" happens (RNF-13).
+
+# Web framework: routing, request parsing, the Jinja2 template of the welcome
+# page, and the test client the integration tests use.
+Flask==3.1.3
+
+# JWT creation and verification for /login and the protected routes.
+#
+# Chosen over flask-jwt-extended on purpose (D-16): the extension brings its own
+# configuration surface, its own decorators, its own error handlers and its own
+# notion of an identity — none of which the brief asks for, all of which hide
+# behaviour a test would have to work around. Here a token is one HS256 payload
+# carrying a user id and an expiry (D-03, D-20), and a handful of lines decode
+# and verify it. PyJWT does that and nothing else, and it keeps the payload and
+# the error handling in this project's hands.
+PyJWT==2.13.0
+
+# Test runner (Fase 2). pytest is the runner AGENTS.md fixes for this project.
+pytest==9.1.1
+
+# Coverage reporting for the pytest suite (D-16, Fase 9.1).
+# Demand comes from the evidence plan, not from convenience: E-02 is the coverage
+# report produced with `pytest --cov`, and the phase gate lists it among the
+# minimum evidence. Here it reports which code no test ever executes.
+# The development machine does not have it installed; the version is the one a
+# clean install resolves next to pytest 9.1.1, measured in an empty virtualenv.
+pytest-cov==7.1.0
+
+# Password hashing deliberately adds nothing to this file. werkzeug.security
+# ships with Flask, so the hashing costs no extra package, and it is used through
+# generate_password_hash / check_password_hash. The default algorithm is scrypt,
+# whose stored hash measures 162 characters — worth knowing when reading the
+# `password_hash` column, and the reason `docs/modelo-de-datos.md` puts no length
+# bound on it.
+
+# ── Scope of this file: direct dependencies only ──────────────────────────────
+#
+# pip will also install what these four require: Jinja2, MarkupSafe, itsdangerous,
+# click, blinker, colorama, packaging, pluggy, iniconfig, Pygments and Werkzeug.
+# They are deliberately not listed. The project never imports them, so there is no
+# per-line reason to give, and a freeze dump would bury the four choices above
+# that actually matter.
+#
+# One measured consequence of that scope, recorded rather than hidden: Werkzeug
+# *is* imported directly (werkzeug.security), yet its version is not pinned here,
+# so pip resolves it freely. Measured on a clean install, Flask 3.1.3 pulls
+# Werkzeug 3.1.9 while the development machine has 3.1.8. A patch difference on a
+# stable API is harmless for this project, and it is fixed as soon as the
+# virtualenv of Phase 2.1 becomes the environment of record. If exact
+# reproduction is ever required, pin Werkzeug==3.1.8 here.

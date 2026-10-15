@@ -161,3 +161,29 @@ immutable.
   are enforced.
 - **Affects:** `docs/modelo-de-datos.md` §2 (the DDL of record) and its §5 (the deviation
   record).
+
+### D-28 — 2026-10-15
+
+- **Decision:** The project targets **Python 3.13**. `requirements.txt` declares it, and
+  the virtualenv created in Phase 2.1 is built with 3.13 — not with the development
+  machine's default interpreter.
+- **Why:** The API is deployed on PythonAnywhere (D-08, DEL-08). Its newest system image,
+  `innit`, supports up to Python 3.13 and offers no 3.14 at all. The development machine
+  defaults to Python 3.14.6, so leaving the version implicit would mean building and
+  testing on an interpreter the deployment cannot run, and finding that out at deployment
+  time. Naming the version is also what RNF-13 asks for: reproducibility means pinned
+  dependencies *and* a documented Python version.
+- **What was measured before deciding:** the supported-versions table on PythonAnywhere's
+  help site, read on 2026-10-15, tops out at 3.13. Python 3.13.14 is installed on the
+  development machine and registered with the `py` launcher alongside the 3.14 default.
+  Against 3.13.14, in an empty virtualenv: the four pinned packages install
+  (`Flask==3.1.3`, `PyJWT==2.13.0`, `pytest==9.1.1`, `pytest-cov==7.1.0`), werkzeug's
+  default scrypt hashing produces and verifies a hash, and the four modules committed in
+  Phase 1 parse unchanged. Nothing in the project required 3.14.
+- **Alternatives rejected:** targeting 3.14 because that is what the development machine
+  runs — it would make DEL-08 unsatisfiable on the chosen host. Targeting a much older
+  version for maximum compatibility — compatibility with hosts this project does not use,
+  paid for with a needlessly old language level for no requirement gain.
+- **Affects:** `requirements.txt` (which declares the version), RNF-13 (its
+  documented-version clause), and Phase 2.1, whose virtualenv must be created with 3.13.
+  Also worth knowing when the deployment is set up.
