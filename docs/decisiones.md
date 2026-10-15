@@ -117,3 +117,47 @@ record is only trustworthy if it is immutable.
   deliverable.
 - **Closes:** F-01. Affects RF-09 (rewritten), TP-21 (its HTML half inverts: 200 **without** a
   token, and the body must carry no task data).
+
+---
+
+## 8. Decisions added after Phase 0.2
+
+The tables in §1–§4 were frozen at the end of Phase 0.2. Later phases append here instead of
+editing them, for the reason §6 gives: the record of *why* is only trustworthy if it is
+immutable.
+
+### D-27 — 2026-10-15
+
+- **Decision:** The `CREATE TABLE` statements frozen in `docs/modelo-de-datos.md` carry two
+  `CHECK` constraints that `PLAN.md` step 1.3 does not give:
+  `titulo TEXT NOT NULL CHECK (length(titulo) <= 200)` and
+  `completada INTEGER NOT NULL DEFAULT 0 CHECK (completada IN (0, 1))`. Every other clause of
+  the plan's DDL is unchanged, verified line by line.
+- **Why:** The plan justifies having a schema at all by calling the database the last line of
+  defence — in its own words, *aunque un bug en el codigo se salte la validacion, el UNIQUE y el
+  NOT NULL siguen ahi*. Measured against the plan's own block, that guarantee held for two of
+  the four rules this project has: it accepted a 5000-character `titulo` (D-19 allows at most
+  200) and it accepted `completada = 7` (D-22 says boolean). The two constraints make the schema
+  defend the same rules the requirements and the contract already state. The second one enforces
+  exactly what `docs/api.md` declares — that the column holds `0` or `1` — so the schema stops
+  being laxer than the contract it backs.
+- **What was measured before deciding:** `length()` in SQLite counts characters, not bytes
+  (`descripción` is 11 characters and 12 bytes), so a 200-character bound refuses 201 characters
+  while still accepting legitimate accented titles. `0`, `1` and an omitted value are accepted;
+  `7`, `-1` and `2` are refused. Case-insensitive uniqueness, the `NOCASE` lookup and every
+  `NOT NULL` were re-measured afterwards and are unaffected. The JSON `true`/`false` conversion
+  is also unaffected: a JSON `true` decodes to Python `True`, which SQLite stores as `1`.
+- **Alternatives rejected:** Keeping the plan's DDL verbatim and enforcing both rules only in
+  the HTTP layer — zero deviation, but it leaves a client-controlled string unbounded at the
+  storage layer, which is the exact failure D-19 exists to prevent. Adding only the `titulo`
+  bound — defensible, but it makes *which* rules the database defends a matter of taste instead
+  of a consistent rule.
+- **Consequence accepted:** a `CHECK` turns a hypothetical validation bug into a visible
+  failure rather than silently stored data. In particular, a non-boolean `completada` that
+  reached the database would raise `IntegrityError` instead of being stored as `2`. The contract
+  already requires a `400` before that point, so this is a backstop, not a new failure path for a
+  correct client.
+- **Closes:** nothing new. D-19 and D-22 stand as written; this decision is about *where* they
+  are enforced.
+- **Affects:** `docs/modelo-de-datos.md` §2 (the DDL of record) and its §5 (the deviation
+  record).
