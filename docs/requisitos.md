@@ -151,3 +151,47 @@ Forward link only. The full matrix `RF ↔ TP ↔ TC ↔ test file ↔ result` i
 | TP-23 | RNF-10 |
 | TP-24 | A-02, RF-01 |
 | TP-25 | RF-16, D-17 |
+
+---
+
+## Revisions
+
+Appended, never edited in place — the same rule as `docs/decisiones.md`. An RF row records what
+the requirement said; a revision records what it left under-specified and how it was closed.
+
+Both gaps below were found in Phase 1.2, while writing `docs/api.md`. That phase has to pin
+every `400` decision, and an ambiguous requirement cannot be pinned.
+
+### RF-01 revisada — 2026-10-14
+
+- **Replaces:** the verification clause of RF-01. The RF-01 row above is **not** edited.
+- **What was under-specified:** RF-01 rejects a body where a field is "missing **or not a
+  string**". An empty string *is* a string, so RF-01 read literally accepts `usuario: ""` and
+  `contraseña: ""`.
+- **Closed by:** D-14 (the password policy is non-empty, so `""` is out) and D-21 (`usuario` is
+  stripped before validation — which is only meaningful if the stripped result must be
+  non-empty). The requirement row was narrower than the decisions governing it.
+- **Verification, corrected:** valid body → 201 · missing field → 400 · non-string field → 400 ·
+  `usuario: ""` → 400 · `usuario: "   "` → 400 (empty after stripping, D-21) · `contraseña: ""` →
+  400 (D-14).
+- **Extends:** TP-02 for the `usuario` cases; TP-24 already carries the non-empty password policy.
+- **Also pinned in:** `docs/api.md` §7, value 4.
+
+### RF-13 revisada — 2026-10-14
+
+- **Replaces:** the verification clause of RF-13. The RF-13 row above is **not** edited.
+- **What was under-specified:** RF-13 requires a "non-empty" `titulo`, but does not say whether a
+  title made only of spaces counts — and `"   "` is not an empty string. The `strip` rule existed
+  only in working-plan step 7.3, and `PLAN.md` is **not versioned** (D-24), so until Phase 1.2
+  the rule was not durable in any artefact inside the repository.
+- **Closed by:** working-plan step 7.3, now made durable here.
+- **Verification, corrected:** missing `titulo` → 400 · `titulo: ""` → 400 · `titulo: "   "` → 400
+  (empty after stripping) · non-string `titulo` → 400 · 201 characters → 400 · 200 characters →
+  201 (the limit is inclusive: "at most 200") · and the `titulo` returned by the API equals the
+  value **as sent**, not a stripped copy — validation strips, storage does not mutate user
+  content.
+- **Extends:** TP-12.
+- **Also pinned in:** `docs/api.md` §7, value 8.
+
+**No other RF row was affected.** The full `RF ↔ TP ↔ TC ↔ test file ↔ result` matrix that
+carries these extra cases is built in Phase 1.6 and completed in Phase 9.2.
