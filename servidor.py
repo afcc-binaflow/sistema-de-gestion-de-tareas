@@ -42,6 +42,7 @@ def create_app(config_objeto=None):
         Path(app.config["DATABASE"]).parent.mkdir(parents=True, exist_ok=True)
 
     db.init_app(app)
+    db.init_db(app)
     routes.registrar_rutas(app)
 
     return app
