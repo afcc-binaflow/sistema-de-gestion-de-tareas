@@ -352,7 +352,7 @@ is one of the values this contract pins rather than derives — see §7.
 | `token` | string | `/login` response | JWT, `HS256`, 8-hour expiry |
 | `error` | string | Every error response | Always present, never any other key |
 | `id` | integer | Task responses; `<id>` in paths | Server-assigned, never sent by the client |
-| `titulo` | string | Task request and response | Required, non-empty after stripping, at most 200 characters |
+| `titulo` | string | Task request and response | Required, non-empty after stripping, at most 200 characters, stored stripped |
 | `completada` | boolean | Task request and response | Optional on write, defaults to `false` |
 
 **The task representation is exactly `{"id", "titulo", "completada"}`** (RF-10). The owner's id
@@ -379,10 +379,11 @@ this document decided, and object to it.
 | 3 | `PUT` requires `titulo`, and an omitted `completada` becomes `false` | `PUT` replaces the whole resource, so an omitted field reverts to its default. This keeps `PUT` idempotent — sending the same body twice leaves the same resource — which RF-10's "create and update accept" wording implies but does not state |
 | 4 | An empty string is invalid for both `usuario` and `contraseña` | Empty-after-strip follows from D-21, and non-empty is exactly D-14's password policy. **Gap worth noting:** RF-01 says "missing **or not a string**" → `400`, and `""` is a string, so RF-01 read literally would accept an empty username. The rule comes from D-14 and D-21, not from RF-01 |
 | 5 | Trailing slashes are strict: `/api/tareas/` is a `404`, never a redirect | D-23 requires exactly one documented slash behaviour. A `308` redirect is the trap: many HTTP clients do not replay a `POST` body across a redirect, so the request silently loses its data |
-| 6 | `<id>` is an integer; a non-integer segment is a `404` | The route simply does not match, so no special case is needed |
+| 6 | `<id>` is an integer; a non-integer segment is a `404`, and so is an integer SQLite cannot store (`>= 2^63`) | Neither case needs a special branch in a view: an id SQLite cannot bind is a resource that does not exist, so it is a `404`, not a `500` for input the client controls |
 | 7 | The welcome page's HTML content is **not** contractual | No client parses it. Pinning the markup would turn a copy edit into a breaking change |
-| 8 | `titulo` is validated **after stripping**, but stored **as typed** | Validating after stripping rejects a title made only of spaces, which carries no information. Storing as typed does not mutate user content — the same reasoning D-21 uses when it refuses to strip `contraseña`. **Gap worth noting:** RF-13 says only "non-empty", so `"   "` would pass RF-13 read literally. The intent comes from working-plan step 7.3, and `PLAN.md` is **not versioned** (D-24) — so this contract is where the rule first becomes durable |
+| 8 | `titulo` is validated **after stripping**, and also stored **stripped** | Validating after stripping rejects a title made only of spaces, which carries no information, and matches D-21's treatment of `usuario` (a name, not a secret). Storing the stripped value keeps what was validated and what is stored identical. Storing the original as typed would also break the column's own `length(titulo) <= 200` check: a 200-character title padded with spaces is longer than 200 once stored, and the `CHECK` would turn a valid request into a `500`. **Gap worth noting:** RF-13 says only "non-empty", so `"   "` would pass RF-13 read literally. The intent comes from working-plan step 7.3, and `PLAN.md` is **not versioned** (D-24) — so this contract is where the rule first becomes durable |
 | 9 | `Content-Type: application/json` is required **only on requests that carry a body** (`POST`, `PUT`) | A `GET` has nothing to parse, so demanding a header for an empty body would fail a correct client for no reason. RF-15 says "a JSON endpoint called without a JSON `Content-Type`" without drawing that line, and a test suite that over-applies the rule is wrong in the other direction |
+| 10 | Only the declared methods work: `OPTIONS` on `/api/*` is a `405`, not an automatic `200` | Flask answers `OPTIONS` by itself with an HTML body. That is a method this contract never declared and a response that is not JSON, on a route a client may well probe. Turning it off keeps one rule — declared or `405` — and costs nothing: CORS is out of scope |
 
 ---
 

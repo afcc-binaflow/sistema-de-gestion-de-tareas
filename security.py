@@ -58,5 +58,15 @@ def crear_token(usuario_id, clave=None, exp=None):
 
 
 def decodificar_token(token, clave=None):
-    """Decodifica y valida un JWT. Lanza jwt.InvalidTokenError si es invalido."""
-    return jwt.decode(token, _clave(clave), algorithms=["HS256"])
+    """Decodifica y valida un JWT. Lanza jwt.InvalidTokenError si es invalido.
+
+    `require=["exp"]` no es redundante: PyJWT valida el vencimiento **si el claim
+    esta** y lo ignora si falta. Sin exigirlo, un token sin `exp` es eterno y D-20
+    ("vive 8 horas") deja de ser cierto sin que nada lo delate.
+    """
+    return jwt.decode(
+        token,
+        _clave(clave),
+        algorithms=["HS256"],
+        options={"require": ["exp"]},
+    )

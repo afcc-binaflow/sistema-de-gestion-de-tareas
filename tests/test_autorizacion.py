@@ -120,6 +120,22 @@ def test_token_sin_claim_sub_devuelve_401(client, app):
     assert _error(respuesta) == MENSAJE_401
 
 
+def test_token_sin_claim_exp_devuelve_401(client, app):
+    """D-20 dice que el token vive 8 horas; un token sin `exp` no vence nunca.
+
+    PyJWT valida `exp` **si esta**, y lo ignora si falta: sin exigirlo, un token
+    firmado sin vencimiento es eterno y el contrato de §6 es mentira. Solo es
+    forjable con la clave, pero una garantia que depende de que nadie la omita no
+    es una garantia.
+    """
+    sin_exp = jwt.encode({"sub": "1", "iat": 1}, app.config["SECRET_KEY"], algorithm="HS256")
+
+    respuesta = client.get("/api/tareas", headers={"Authorization": f"Bearer {sin_exp}"})
+
+    assert respuesta.status_code == 401
+    assert _error(respuesta) == MENSAJE_401
+
+
 def test_token_con_sub_que_no_es_entero_devuelve_401(client, app):
     """`sub` es un string por contrato, pero un atacante puede firmar lo que sea."""
     raro = jwt.encode({"sub": "abc", "iat": 1, "exp": 9999999999}, app.config["SECRET_KEY"], algorithm="HS256")
@@ -167,6 +183,23 @@ def test_el_token_no_se_acepta_por_cookie(client, token_valido):
 
     assert respuesta.status_code == 401
     assert _error(respuesta) == MENSAJE_401
+
+
+# ---------------------------------------------------------------------------
+# El contrato de metodo tambien cubre OPTIONS
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("ruta", ["/api/tareas", "/api/tareas/1"])
+def test_options_devuelve_405_en_json(client, ruta):
+    """Flask contesta `OPTIONS` solo, con un 200 HTML: eso rompe el contrato.
+
+    El contrato (§3) dice que la API siempre responde JSON, y §4.4-4.8 que el
+    metodo se declara o es un 405. Un `OPTIONS` automatico es una tercera cosa:
+    ni lo uno ni lo otro. Y no hace falta: no hay CORS en el alcance.
+    """
+    respuesta = client.options(ruta)
+
+    assert respuesta.status_code == 405
+    assert _error(respuesta) == "Método no permitido"
 
 
 # ---------------------------------------------------------------------------

@@ -124,7 +124,7 @@ the API sees them.
 | TC-LOG-08 | TP-02 | Equivalence | body without `contraseña` | 400 |
 | TC-LOG-09 | TP-01 | Decision | `GET /login` | 405 |
 
-### 3.3 Token and authentication — `tests/test_seguridad.py`, `tests/test_autenticacion.py` (Phase 4, 7)
+### 3.3 Token and authentication - `tests/test_seguridad.py`, `tests/test_autorizacion.py` (Phase 4, 7)
 
 | ID | TP | Technique | Given / When | Expected |
 |---|---|---|---|---|
@@ -136,8 +136,10 @@ the API sees them.
 | TC-TOK-06 | TP-05 | Inspection | decode the payload as base64 | no password, no hash, no `SECRET_KEY` |
 | TC-AUT-01 | TP-10 | Authorization | `GET /api/tareas` with no `Authorization` header | 401 |
 | TC-AUT-02 | TP-10 | Parameterized | the five CRUD routes, each with no header | 401 on all five |
-| TC-AUT-03 | TP-10 | Boundary | `Bearer` with empty token · `Basic x` · raw token without the `Bearer` prefix · `Bearer  <token>` (double space) | 401 on each |
+| TC-AUT-03 | TP-10 | Boundary | `Bearer` with empty token · `Basic x` · raw token without the `Bearer` prefix · `Bearer` followed only by spaces | 401 on each. **Not** a 401: `Bearer  <token>` with a double space, which RFC 7235 §2.1 allows (`1*SP`) |
 | TC-AUT-04 | TP-21 | Exception | `GET /tareas` with no header | 200 — the one route that is public by design |
+| TC-AUT-05 | TP-08 | Fault injection | a JWT signed with the real key but **without `exp`** | 401 — `decodificar_token` requires the claim, so D-20 cannot be bypassed by omission |
+| TC-AUT-06 | TP-01 | Decision | `OPTIONS /api/tareas` and `OPTIONS /api/tareas/1` | 405 with a JSON body — Flask's automatic `OPTIONS` is disabled (`docs/api.md` §7, value 10) |
 
 ### 3.4 Task CRUD — `tests/test_tareas.py` (Phase 7)
 
@@ -154,13 +156,14 @@ the API sees them.
 | TC-TAR-09 | TP-12 | Boundary | `titulo` of exactly 200 characters | 201 (the limit is inclusive) |
 | TC-TAR-10 | TP-12 | Boundary | `titulo` of 201 characters | 400 |
 | TC-TAR-11 | TP-12 | Equivalence | `completada: "si"` | 400 |
-| TC-TAR-12 | TP-12 | Fidelity | `titulo: "  hola  "` | 201 and the stored/returned title is **`"  hola  "`** — validated after stripping, stored as typed (`docs/api.md` §7, value 8) |
+| TC-TAR-12 | TP-12 | Fidelity | `titulo: "  hola  "` | 201 and the stored/returned title is **`"hola"`** — validated after stripping, stored stripped (`docs/api.md` §7, value 8) |
 | TC-TAR-13 | TP-11 | Authorization (IDOR) | A requests B's task with `GET` | **404**, not 403, not 200 |
 | TC-TAR-14 | TP-11 | Authorization (IDOR) | A updates B's task with `PUT` | 404, and the task is unchanged afterwards |
 | TC-TAR-15 | TP-11 | Authorization (IDOR) | A deletes B's task with `DELETE` | 404, and the task still exists for B |
 | TC-TAR-16 | TP-11 | Authorization (IDOR) | A lists tasks while B has tasks | only A's tasks, by count and by id |
 | TC-TAR-17 | TP-11 | Authorization | A creates a task with `usuario_id` = B's id in the body | 201 and the task belongs to **A** — the body field is ignored |
 | TC-TAR-18 | TP-01 | Decision | `PATCH /api/tareas/1` | 405 (PATCH is a non-goal) |
+| TC-TAR-19 | TP-13 | Boundary | `GET`/`PUT`/`DELETE /api/tareas/9223372036854775808` (`2^63`) | 404 JSON — an id SQLite cannot store cannot exist, and the driver would raise on it |
 
 ### 3.5 Errors — `tests/test_errores.py` (Phase 7.5)
 
@@ -241,8 +244,8 @@ Every test point has at least one case, and every case names a test point:
 |---|---|---|
 | Registration | TC-REG-01 … 16 | TP-01, TP-02, TP-03, TP-05, TP-18, TP-19, TP-24 |
 | Login | TC-LOG-01 … 09 | TP-01, TP-02, TP-06, TP-07, TP-18, TP-24 |
-| Token and auth | TC-TOK-01 … 06, TC-AUT-01 … 04 | TP-05, TP-08, TP-09, TP-10, TP-21 |
-| Task CRUD | TC-TAR-01 … 18 | TP-01, TP-11, TP-12, TP-13 |
+| Token and auth | TC-TOK-01 … 06, TC-AUT-01 … 06 | TP-01, TP-05, TP-08, TP-09, TP-10, TP-21 |
+| Task CRUD | TC-TAR-01 … 19 | TP-01, TP-11, TP-12, TP-13 |
 | Errors | TC-ERR-01 … 05 | TP-14, TP-16, TP-22 |
 | Persistence | TC-DB-01 … 08 | TP-03, TP-04, TP-11, TP-14, TP-15, TP-19, TP-20 |
 | Security unit | TC-SEG-01 … 03 | TP-04 |

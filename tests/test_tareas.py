@@ -412,6 +412,30 @@ def test_post_a_un_id_devuelve_405(client, autorizacion):
 
 
 # ---------------------------------------------------------------------------
+# El id que SQLite no puede guardar
+# ---------------------------------------------------------------------------
+ID_FUERA_DE_RANGO = 2**63  # uno mas que el maximo de un INTEGER de SQLite
+
+
+@pytest.mark.parametrize("metodo", ["get", "put", "delete"])
+def test_id_fuera_del_rango_de_sqlite_devuelve_404(client, autorizacion, metodo):
+    """`<int:>` acepta enteros de cualquier tamano; SQLite solo guarda 64 bits.
+
+    Sin cota en el converter, el id llega al driver, que revienta con
+    `OverflowError`, y el manejador de `Exception` lo convierte en un 500 por una
+    entrada que el cliente controla. El contrato (§4.6) pide 404: el recurso no
+    existe, y "no existe" incluye "no existe un id asi".
+    """
+    cuerpo = {"json": {"titulo": "x", "completada": False}} if metodo == "put" else {}
+    respuesta = getattr(client, metodo)(
+        f"/api/tareas/{ID_FUERA_DE_RANGO}", headers=autorizacion, **cuerpo
+    )
+
+    assert respuesta.status_code == 404
+    assert _error(respuesta) == "Recurso no encontrado"
+
+
+# ---------------------------------------------------------------------------
 # TP-14: el titulo es un valor, no SQL
 # ---------------------------------------------------------------------------
 def test_el_titulo_con_sql_se_guarda_como_texto(client, autorizacion):

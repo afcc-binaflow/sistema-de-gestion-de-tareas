@@ -20,6 +20,16 @@ from db import obtener_conexion
 
 LIMITE_TITULO = 200
 
+# SQLite guarda los enteros en 64 bits. `<int:>` de Werkzeug acepta enteros de
+# cualquier tamano, asi que un id mayor llega al driver y revienta con
+# OverflowError: un 500 por una entrada que el cliente controla.
+#
+# La cota NO puede vivir en el converter (`<int(max=...)>`): cuando la conversion
+# falla en PUT o DELETE, Werkzeug ya acumulo los metodos de las reglas anteriores
+# —GET y HEAD— y responde 405 con `Allow: GET, HEAD` en vez del 404 del contrato.
+# Por eso se valida en la vista, con `_id_fuera_del_rango`.
+ID_MAXIMO = 2**63 - 1
+
 
 def bienvenida():
     """Pagina de bienvenida: publica y sin datos de ningun usuario.
@@ -83,6 +93,16 @@ def _validar_tarea(datos):
         return None, "El campo 'completada' debe ser un booleano"
 
     return (titulo, completada), None
+
+
+def _id_fuera_del_rango(tarea_id):
+    """True si el id no cabe en un `INTEGER` de SQLite, o sea si no puede existir.
+
+    Un id fuera de rango no es un error del servidor: es un recurso que no existe,
+    y el contrato (§4.6) pide 404. Se comprueba antes de tocar la base porque el
+    driver no puede ni recibir el valor.
+    """
+    return not 1 <= tarea_id <= ID_MAXIMO
 
 
 def _usuario_del_token():
@@ -240,6 +260,9 @@ def obtener_tarea(tarea_id):
     404 no revela nada y es coherente con el login, que tampoco dice si un
     usuario existe.
     """
+    if _id_fuera_del_rango(tarea_id):
+        return jsonify({"error": "Recurso no encontrado"}), 404
+
     tarea = repository.obtener_tarea_de(obtener_conexion(), tarea_id, g.usuario_id)
     if tarea is None:
         return jsonify({"error": "Recurso no encontrado"}), 404
@@ -261,6 +284,8 @@ def actualizar_tarea(tarea_id):
         return jsonify({"error": error}), 400
 
     titulo, completada = tarea
+    if _id_fuera_del_rango(tarea_id):
+        return jsonify({"error": "Recurso no encontrado"}), 404
     if not repository.actualizar_tarea_de(
         obtener_conexion(), tarea_id, g.usuario_id, titulo, completada
     ):
@@ -284,6 +309,8 @@ def borrar_tarea(tarea_id):
     `text/html; charset=utf-8` a cualquier respuesta vacia. Se construye la
     respuesta y se quita el header a mano, que es lo unico que cumple D-23.
     """
+    if _id_fuera_del_rango(tarea_id):
+        return jsonify({"error": "Recurso no encontrado"}), 404
     if not repository.borrar_tarea_de(obtener_conexion(), tarea_id, g.usuario_id):
         return jsonify({"error": "Recurso no encontrado"}), 404
 
@@ -336,23 +363,34 @@ def registrar_rutas(app):
     que el prefijo comparta, no antes.
 
     `<int:tarea_id>` es `int` a proposito: `/api/tareas/abc` no matchea la ruta y
-    cae en el 404 del contrato (docs/api.md §4.6), sin codigo extra.
+    cae en el 404 del contrato (docs/api.md §4.6), sin codigo extra. El techo del
+    rango va en la vista y no en el converter: ver `ID_MAXIMO`.
+
+    `provide_automatic_options=False` en las cinco reglas de `/api`: Flask
+    contesta `OPTIONS` por su cuenta con un 200 en HTML, que es a la vez un
+    metodo que el contrato no declara y una respuesta que no es JSON. Un 405 con
+    `Allow` dice lo mismo y dice la verdad.
     """
     app.add_url_rule("/tareas", view_func=bienvenida, methods=["GET"])
     app.add_url_rule("/registro", view_func=registrar, methods=["POST"])
     app.add_url_rule("/login", view_func=iniciar_sesion, methods=["POST"])
 
-    app.add_url_rule("/api/tareas", view_func=listar_tareas, methods=["GET"])
-    app.add_url_rule("/api/tareas", view_func=crear_tarea, methods=["POST"])
-    app.add_url_rule(
-        "/api/tareas/<int:tarea_id>", view_func=obtener_tarea, methods=["GET"]
-    )
-    app.add_url_rule(
-        "/api/tareas/<int:tarea_id>", view_func=actualizar_tarea, methods=["PUT"]
-    )
-    app.add_url_rule(
-        "/api/tareas/<int:tarea_id>", view_func=borrar_tarea, methods=["DELETE"]
-    )
+    # Una sola lista para las cinco reglas de la API: asi ninguna se queda sin
+    # `provide_automatic_options=False` por olvido, que es el mismo argumento por
+    # el que el chequeo de token es un decorador y no una linea en cada vista.
+    for regla, vista, metodos in (
+        ("/api/tareas", listar_tareas, ["GET"]),
+        ("/api/tareas", crear_tarea, ["POST"]),
+        ("/api/tareas/<int:tarea_id>", obtener_tarea, ["GET"]),
+        ("/api/tareas/<int:tarea_id>", actualizar_tarea, ["PUT"]),
+        ("/api/tareas/<int:tarea_id>", borrar_tarea, ["DELETE"]),
+    ):
+        app.add_url_rule(
+            regla,
+            view_func=vista,
+            methods=metodos,
+            provide_automatic_options=False,
+        )
 
     # Fase 7.5 adelantada a la Fase 5: sin estos tres manejadores, 404, 405 y
     # 500 rompen el contrato JSON y el 500 expone el traceback.
