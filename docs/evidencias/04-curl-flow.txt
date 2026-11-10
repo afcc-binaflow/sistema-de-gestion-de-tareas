@@ -1,0 +1,10 @@
+﻿# Comando: curl flow against http://127.0.0.1:5000
+# Fecha: 2026-11-10 20:20
+
+register: {"error":"El usuario ya existe"}
+login: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzk0MzUyODM3LCJleHAiOjE3OTQzODE2Mzd9.49PCmnoHtyfCo7tM57E0bchiZxTWcB7aBxamlcNn34M"}
+create: {"completada":false,"id":2,"titulo":"Estudiar SQLite"}
+list: [{"completada":false,"id":2,"titulo":"Estudiar SQLite"}]
+update: {"error":"Recurso no encontrado"}
+delete status: 404
+GET /api/tareas without token: 401

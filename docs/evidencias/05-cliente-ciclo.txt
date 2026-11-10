@@ -1,0 +1,99 @@
+﻿
+=== Gestor de tareas ===
+Sin sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: Usuario: Contrase├▒a: Usuario 'maria' creado. Ahora inici├í sesi├│n (opci├│n 2).
+
+=== Gestor de tareas ===
+Sin sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: Usuario: Contrase├▒a: Sesi├│n iniciada como 'maria'.
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: T├¡tulo: Tarea 1 creada.
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: 1 [ ] Estudiar SQLite
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: Id de la tarea: T├¡tulo: ┬┐Completada? (s/n): Tarea 1 actualizada.
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: 1 [x] Estudiar SQLite a fondo
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: Id de la tarea: Tarea 1 borrada.
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: No ten├®s tareas todav├¡a.
+
+=== Gestor de tareas ===
+Sesi├│n iniciada.
+1. Registrarse
+2. Iniciar sesi├│n
+3. Listar tareas
+4. Crear tarea
+5. Editar tarea
+6. Borrar tarea
+7. Salir
+Opci├│n: Hasta luego.
