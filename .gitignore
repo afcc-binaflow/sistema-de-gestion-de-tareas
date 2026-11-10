@@ -27,3 +27,6 @@ htmlcov/
 Thumbs.db
 .vscode/
 .idea/
+
+# Notas internas de proceso
+AGENTS.md
