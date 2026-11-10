@@ -166,7 +166,7 @@ def test_todos_los_401_son_byte_a_byte_identicos(client, token_valido, app):
 
 
 # ---------------------------------------------------------------------------
-# TC-AUT-04: el token viaja en el header, no en la URL
+# RF-08 (cobertura extra): el token viaja en el header, no en la URL
 # ---------------------------------------------------------------------------
 def test_el_token_no_se_acepta_por_query_string(client, token_valido):
     """Un token en la URL termina en logs, historial y proxies: el contrato §1 no lo acepta."""

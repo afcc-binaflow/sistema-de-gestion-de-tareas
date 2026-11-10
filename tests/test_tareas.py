@@ -411,6 +411,14 @@ def test_post_a_un_id_devuelve_405(client, autorizacion):
     _error(respuesta)
 
 
+def test_patch_a_un_id_devuelve_405(client, autorizacion):
+    """TC-TAR-18: PATCH no es un metodo del contrato, aunque el recurso exista."""
+    respuesta = client.patch("/api/tareas/1", json={"completada": True}, headers=autorizacion)
+
+    assert respuesta.status_code == 405
+    _error(respuesta)
+
+
 # ---------------------------------------------------------------------------
 # El id que SQLite no puede guardar
 # ---------------------------------------------------------------------------
