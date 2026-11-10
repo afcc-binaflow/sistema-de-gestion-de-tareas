@@ -10,24 +10,25 @@ cada test se crea con `ConfigTest`, que apunta a una base en memoria.
 Fixture de alcance deliberadamente corto
 ----------------------------------------
 El plan de la Fase 2.4 lista cuatro fixtures: `app`, `client`,
-`usuario_registrado`/`token_valido` y `db_vacia`. Hoy solo existen las dos
-primeras, y no es un olvido:
+`usuario_registrado`/`token_valido` y `db_vacia`. Las dos primeras existen desde
+entonces. `usuario_registrado` y `token_valido` se agregaron en la Fase 7, que es
+cuando el codigo de produccion las volvio construibles:
 
-- `usuario_registrado` necesita hashing (`security.py`, Fase 4) o escribir el
-  hash a mano en el test, que seria duplicar la logica de seguridad en la suite.
-- `token_valido` necesita `crear_token` (Fase 4).
-- `db_vacia` necesita `init_db()` y un esquema que crear (Fase 3). En 1.1 ya se
-  documento por que `init_db()` no existe todavia: no hay DDL que ejecutar.
+- `usuario_registrado` se crea **por el endpoint real** (`POST /registro`) y su id
+  se lee de la base. No se inserta con SQL inventado: eso haria que la suite
+  midiera la suite en vez de la aplicacion.
+- `token_valido` usa `security.crear_token` (Fase 4), no un JWT escrito a mano.
 
-Una fixture que crea estado que ninguna capa sabe crear solo puede construir ese
-estado con SQL inventado. AGENTS.md lo prohibe, y ademas haria que la suite
-midiera la suite en vez de la aplicacion. Las tres se agregan en la fase que las
-vuelve posibles.
+`db_vacia` no se agrega: `app` ya entrega una base en memoria vacia por test, y
+una fixture que no agrega nada es codigo muerto.
 """
 
 import pytest
 
 from config import ConfigTest
+from db import obtener_conexion
+from repository import buscar_usuario_por_nombre
+from security import crear_token
 from servidor import create_app
 
 
@@ -41,3 +42,26 @@ def app():
 def client(app):
     """Cliente HTTP de Flask para ejercitar los endpoints sin levantar un server."""
     return app.test_client()
+
+
+@pytest.fixture
+def usuario_registrado(client, app):
+    """Registra `juan` por el camino real y devuelve `{"usuario", "id"}`."""
+    respuesta = client.post("/registro", json={"usuario": "juan", "contraseña": "1234"})
+    assert respuesta.status_code == 201
+
+    with app.app_context():
+        fila = buscar_usuario_por_nombre(obtener_conexion(), "juan")
+    return {"usuario": "juan", "id": fila["id"]}
+
+
+@pytest.fixture
+def token_valido(app, usuario_registrado):
+    """Token firmado con la misma clave que usa la app bajo prueba."""
+    return crear_token(usuario_registrado["id"], clave=app.config["SECRET_KEY"])
+
+
+@pytest.fixture
+def autorizacion(token_valido):
+    """Header listo para `headers=autorizacion`."""
+    return {"Authorization": f"Bearer {token_valido}"}

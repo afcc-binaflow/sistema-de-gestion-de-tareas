@@ -8,13 +8,17 @@ a HTTP. Sin ellos, Flask responde HTML y el contrato de la API (siempre JSON) se
 rompe justo cuando el cliente mas necesita leer el error.
 """
 
+import functools
 import sqlite3
 
-from flask import current_app, jsonify, render_template, request
+import jwt
+from flask import current_app, g, jsonify, render_template, request
 
 import repository
 import security
 from db import obtener_conexion
+
+LIMITE_TITULO = 200
 
 
 def bienvenida():
@@ -52,6 +56,80 @@ def _validar_credenciales(datos):
         return None, "El campo 'contraseña' es obligatorio y debe ser un texto no vacío"
 
     return (usuario.strip(), contrasena), None
+
+
+def _validar_tarea(datos):
+    """Valida el recurso completo de una tarea; `POST` y `PUT` comparten la regla.
+
+    Devuelve `((titulo, completada), None)` o `(None, mensaje)`. `titulo` se
+    recorta **antes** de medir el largo (D-21 aplicado a tareas): "  x  " son tres
+    caracteres, no cinco, y rechazarlo por largo seria contar espacios que no se
+    guardan. `completada` se compara con `bool` y no con *truthy* a proposito:
+    `"si"`, `1` y `[]` son `400`, no un `false` silencioso que el cliente no pidio.
+    """
+    if not isinstance(datos, dict):
+        return None, "El cuerpo debe ser un objeto JSON"
+
+    titulo = datos.get("titulo")
+    if not isinstance(titulo, str) or not titulo.strip():
+        return None, "El campo 'titulo' es obligatorio y debe ser un texto no vacío"
+
+    titulo = titulo.strip()
+    if len(titulo) > LIMITE_TITULO:
+        return None, "El campo 'titulo' no puede superar los 200 caracteres"
+
+    completada = datos.get("completada", False)
+    if not isinstance(completada, bool):
+        return None, "El campo 'completada' debe ser un booleano"
+
+    return (titulo, completada), None
+
+
+def _usuario_del_token():
+    """Devuelve el id del usuario del header `Authorization`, o `None`.
+
+    La clave se pasa **explicita** desde la config de la app. Sin eso,
+    `security.decodificar_token` cae al `SECRET_KEY` del entorno: si los dos no
+    coinciden, la app firma con una clave y valida con otra, y el sintoma es que
+    todos los tokens son invalidos sin ninguna pista de por que.
+    """
+    cabecera = request.headers.get("Authorization", "")
+    esquema, _, token = cabecera.partition(" ")
+    # RFC 7235 §2.1: el nombre del esquema es case-insensitive.
+    if esquema.lower() != "bearer" or not token.strip():
+        return None
+
+    try:
+        payload = security.decodificar_token(
+            token.strip(), clave=current_app.config["SECRET_KEY"]
+        )
+        return int(payload["sub"])
+    except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+        return None
+
+
+def requiere_token(vista):
+    """Exige `Authorization: Bearer <token>` y deja el usuario en `g.usuario_id`.
+
+    Es un decorador y no un chequeo repetido por endpoint porque el olvido es el
+    bug: una vista nueva sin el decorador es un endpoint abierto, y el decorador
+    hace visible en el codigo que esa ruta esta protegida.
+
+    Un solo 401 para las seis causas del contrato (docs/api.md §1): header
+    ausente, sin `Bearer`, token vacio, malformado, alterado, expirado o firmado
+    con otra clave. Distinguirlas le diria al cliente —y a un atacante— en que
+    parte del token acerto.
+    """
+
+    @functools.wraps(vista)
+    def envoltura(*args, **kwargs):
+        usuario_id = _usuario_del_token()
+        if usuario_id is None:
+            return jsonify({"error": "Token ausente o inválido"}), 401
+        g.usuario_id = usuario_id
+        return vista(*args, **kwargs)
+
+    return envoltura
 
 
 def registrar():
@@ -123,6 +201,97 @@ def iniciar_sesion():
     return jsonify({"token": token}), 200
 
 
+@requiere_token
+def listar_tareas():
+    """`GET /api/tareas`: solo las del dueno (RF-11).
+
+    El filtro va en el `WHERE` del SQL (`repository.listar_tareas_de`), no
+    filtrando en Python despues de leer todo: filtrar despues significa que
+    olvidarse una vez devuelve datos ajenos y nada en el camino feliz lo revela.
+    """
+    return jsonify(repository.listar_tareas_de(obtener_conexion(), g.usuario_id))
+
+
+@requiere_token
+def crear_tarea():
+    """`POST /api/tareas`: el dueno sale del token, nunca del cuerpo (RF-10).
+
+    Aceptar un `usuario_id` del cliente seria un IDOR de escritura: el atacante
+    crearia tareas a nombre de cualquiera. El campo no se lee ni para ignorarlo
+    explicitamente: simplemente no existe para esta vista.
+    """
+    datos = request.get_json(silent=True)
+    tarea, error = _validar_tarea(datos)
+    if error:
+        return jsonify({"error": error}), 400
+
+    titulo, completada = tarea
+    tarea_id = repository.crear_tarea(
+        obtener_conexion(), titulo, g.usuario_id, completada
+    )
+    return jsonify({"id": tarea_id, "titulo": titulo, "completada": completada}), 201
+
+
+@requiere_token
+def obtener_tarea(tarea_id):
+    """`GET /api/tareas/<id>`: 404 si no existe **o si no es tuya** (D-07).
+
+    Un 403 confirmaria que la tarea existe, que es informacion del otro usuario.
+    404 no revela nada y es coherente con el login, que tampoco dice si un
+    usuario existe.
+    """
+    tarea = repository.obtener_tarea_de(obtener_conexion(), tarea_id, g.usuario_id)
+    if tarea is None:
+        return jsonify({"error": "Recurso no encontrado"}), 404
+    return jsonify(tarea)
+
+
+@requiere_token
+def actualizar_tarea(tarea_id):
+    """`PUT /api/tareas/<id>`: reemplaza el recurso completo (D-17).
+
+    Se valida el cuerpo **antes** de buscar la tarea: un cuerpo invalido es 400
+    exista o no la tarea, asi que la respuesta no filtra si el id pertenece a
+    alguien. El `WHERE` del `UPDATE` filtra por dueno, y que no toque ninguna fila
+    es el 404 — un update a la tarea de otro no es ni exito ni no-op silencioso.
+    """
+    datos = request.get_json(silent=True)
+    tarea, error = _validar_tarea(datos)
+    if error:
+        return jsonify({"error": error}), 400
+
+    titulo, completada = tarea
+    if not repository.actualizar_tarea_de(
+        obtener_conexion(), tarea_id, g.usuario_id, titulo, completada
+    ):
+        return jsonify({"error": "Recurso no encontrado"}), 404
+
+    actualizada = repository.obtener_tarea_de(
+        obtener_conexion(), tarea_id, g.usuario_id
+    )
+    return jsonify(actualizada)
+
+
+@requiere_token
+def borrar_tarea(tarea_id):
+    """`DELETE /api/tareas/<id>`: 204 sin cuerpo (D-23).
+
+    Devolver `{"ok": true}` contradiria el status: 204 significa justamente
+    "listo, no hay nada que devolver". Por eso la respuesta no lleva
+    `Content-Type`: no hay contenido que tipar.
+
+    `return "", 204` no alcanza: Werkzeug le pone igual
+    `text/html; charset=utf-8` a cualquier respuesta vacia. Se construye la
+    respuesta y se quita el header a mano, que es lo unico que cumple D-23.
+    """
+    if not repository.borrar_tarea_de(obtener_conexion(), tarea_id, g.usuario_id):
+        return jsonify({"error": "Recurso no encontrado"}), 404
+
+    respuesta = current_app.response_class(status=204)
+    respuesta.headers.pop("Content-Type", None)
+    return respuesta
+
+
 def recurso_no_encontrado(error):
     """404 en JSON. Flask responde HTML por defecto (TP-22)."""
     return jsonify({"error": "Recurso no encontrado"}), 404
@@ -160,13 +329,30 @@ def error_no_controlado(error):
 def registrar_rutas(app):
     """Conecta las rutas a la app.
 
-    Sin blueprint a proposito: hoy es una abstraccion con una sola
-    implementacion, justo lo que AGENTS.md prohibe. Cuando haya un grupo de
-    rutas que compartan prefijo, el blueprint se gana su lugar.
+    Sin blueprint incluso con el prefijo `/api` de la Fase 7: cinco reglas de una
+    linea no se vuelven mas simples con un objeto de registro aparte, y lo que
+    comparten —el error 401, `g.usuario_id`, los manejadores de error— es de la
+    app, no del prefijo. El blueprint se gana su lugar cuando haya estado propio
+    que el prefijo comparta, no antes.
+
+    `<int:tarea_id>` es `int` a proposito: `/api/tareas/abc` no matchea la ruta y
+    cae en el 404 del contrato (docs/api.md §4.6), sin codigo extra.
     """
     app.add_url_rule("/tareas", view_func=bienvenida, methods=["GET"])
     app.add_url_rule("/registro", view_func=registrar, methods=["POST"])
     app.add_url_rule("/login", view_func=iniciar_sesion, methods=["POST"])
+
+    app.add_url_rule("/api/tareas", view_func=listar_tareas, methods=["GET"])
+    app.add_url_rule("/api/tareas", view_func=crear_tarea, methods=["POST"])
+    app.add_url_rule(
+        "/api/tareas/<int:tarea_id>", view_func=obtener_tarea, methods=["GET"]
+    )
+    app.add_url_rule(
+        "/api/tareas/<int:tarea_id>", view_func=actualizar_tarea, methods=["PUT"]
+    )
+    app.add_url_rule(
+        "/api/tareas/<int:tarea_id>", view_func=borrar_tarea, methods=["DELETE"]
+    )
 
     # Fase 7.5 adelantada a la Fase 5: sin estos tres manejadores, 404, 405 y
     # 500 rompen el contrato JSON y el 500 expone el traceback.

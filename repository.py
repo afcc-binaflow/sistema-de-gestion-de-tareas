@@ -32,11 +32,16 @@ def buscar_usuario_por_nombre(conexion, usuario):
     ).fetchone()
 
 
-def crear_tarea(conexion, titulo, usuario_id):
-    """Crea una tarea para un usuario y devuelve su id."""
+def crear_tarea(conexion, titulo, usuario_id, completada=False):
+    """Crea una tarea para un usuario y devuelve su id.
+
+    `completada` se acepta al crear porque el contrato (docs/api.md §4.4) la deja
+    opcional con `false` por defecto: obligar a un `PUT` extra para marcarla seria
+    dos escrituras donde el cliente pidio una.
+    """
     cursor = conexion.execute(
-        "INSERT INTO tareas (titulo, usuario_id) VALUES (?, ?)",
-        (titulo, usuario_id),
+        "INSERT INTO tareas (titulo, usuario_id, completada) VALUES (?, ?, ?)",
+        (titulo, usuario_id, 1 if completada else 0),
     )
     conexion.commit()
     return cursor.lastrowid
