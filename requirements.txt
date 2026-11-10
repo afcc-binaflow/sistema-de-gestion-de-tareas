@@ -8,8 +8,8 @@
 # cannot run, so 3.13 is the version this project declares, and the version the
 # virtualenv of Phase 2.1 must be created with.
 #
-# Verified against Python 3.13.14 before this file was written: all four packages
-# below install cleanly into an empty virtualenv, werkzeug's default scrypt
+# Verified against Python 3.13.14 before this file was written: the packages it
+# listed then install cleanly into an empty virtualenv, werkzeug's default scrypt
 # hashing works, and the four modules committed in Phase 1 parse unchanged. The
 # development machine also carries Python 3.14.6, which is newer than the target
 # and therefore not what this file describes.
@@ -26,12 +26,26 @@ Flask==3.1.3
 #
 # Chosen over flask-jwt-extended on purpose (D-16): the extension brings its own
 # configuration surface, its own decorators, its own error handlers and its own
-# notion of an identity — none of which the brief asks for, all of which hide
+# notion of an identity - none of which the brief asks for, all of which hide
 # behaviour a test would have to work around. Here a token is one HS256 payload
 # carrying a user id and an expiry (D-03, D-20), and a handful of lines decode
 # and verify it. PyJWT does that and nothing else, and it keeps the payload and
 # the error handling in this project's hands.
 PyJWT==2.13.0
+
+# HTTP transport for the console client (Fase 8, RF-16).
+#
+# Chosen over the standard library's `urllib.request` (D-30): `Session` reuses
+# the connection across the menu's calls, and `RequestException` is one base
+# class for every network failure, so the client turns "connection refused",
+# "timeout" and "DNS" into the same one-line message with a single `except`.
+# With urllib the same code needs `URLError` plus `HTTPError`, which is a
+# subclass of it - one handling path too many for a client this size.
+#
+# Measured, not guessed: installing it into the project's virtualenv resolved
+# 2.34.2 on 2026-11-10, next to urllib3 2.8.0, certifi 2026.10.23, idna 3.20 and
+# charset_normalizer 3.5.2 (all pulled by this line, none imported directly).
+requests==2.34.2
 
 # Test runner (Fase 2). pytest is the runner AGENTS.md fixes for this project.
 pytest==9.1.1
@@ -53,10 +67,11 @@ pytest-cov==7.1.0
 
 # ── Scope of this file: direct dependencies only ──────────────────────────────
 #
-# pip will also install what these four require: Jinja2, MarkupSafe, itsdangerous,
-# click, blinker, colorama, packaging, pluggy, iniconfig, Pygments and Werkzeug.
+# pip will also install what these five require: Jinja2, MarkupSafe, itsdangerous,
+# click, blinker, colorama, packaging, pluggy, iniconfig, Pygments, Werkzeug,
+# certifi, charset_normalizer, idna and urllib3.
 # They are deliberately not listed. The project never imports them, so there is no
-# per-line reason to give, and a freeze dump would bury the four choices above
+# per-line reason to give, and a freeze dump would bury the five choices above
 # that actually matter.
 #
 # One measured consequence of that scope, recorded rather than hidden: Werkzeug

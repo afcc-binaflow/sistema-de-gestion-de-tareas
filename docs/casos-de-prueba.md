@@ -227,6 +227,11 @@ one worker with threads, RNF-16 — is re-verified against the deployment in Pha
 | TC-E2E-02 | TP-17 | Fault injection | the API is unreachable (closed port) | one line naming the network failure; non-zero exit; **no traceback** |
 | TC-E2E-03 | TP-17 | Negative | the API answers 400 and 401 | one line with the status code and the API's `error` value; non-zero exit |
 | TC-E2E-04 | TP-17 | Contract | compare the field names and status codes the client uses with `docs/api.md` | exact match (`token`, not `access_token`) |
+| TC-E2E-05 | TP-17 | Boundary | inspect the timeout on every request the client sends | every request carries an explicit positive timeout |
+| TC-E2E-06 | TP-25 | State | the client holds a token the API rejects (expired) | the 401 clears the token in memory and the message asks to log in again |
+| TC-E2E-07 | TP-17 | Boundary | a session with one failed operation, then a clean session | exit code 1, then exit code 0 |
+| TC-E2E-08 | TP-17 | Negative | unparseable input: id `abc`, `completada` = `tal vez`, option `99` | one line, no traceback, and the session keeps running |
+| TC-E2E-09 | TP-23 | State | a `ñ` password (`contraseña`) through register and log in, and the client's output stream | the password round-trips and the stream is forced to UTF-8 |
 
 ### 3.11 Documented limitation — `tests/test_cliente.py` (Phase 8)
 
@@ -250,13 +255,13 @@ Every test point has at least one case, and every case names a test point:
 | Persistence | TC-DB-01 … 08 | TP-03, TP-04, TP-11, TP-14, TP-15, TP-19, TP-20 |
 | Security unit | TC-SEG-01 … 03 | TP-04 |
 | Welcome page | TC-HTML-01 … 03 | TP-01, TP-21 |
-| Encoding | TC-ENC-01 | TP-23 |
-| Client E2E | TC-E2E-01 … 04 | TP-17 |
+| Encoding | TC-ENC-01, TC-E2E-09 | TP-23 |
+| Client E2E | TC-E2E-01 … 09 | TP-17, TP-23, TP-25 |
 | Client limitation | TC-CLI-01 | TP-25 |
 
-**78 cases over 25 test points.** Reverse check: the test points with the most cases are TP-02
-(eleven), TP-12 (eight) and TP-11 (six). Six test points carry a single case each — TP-06, TP-09,
-TP-15, TP-16, TP-23 and TP-25.
+**86 cases over 25 test points.** Reverse check: the test points with the most cases are TP-02
+(eleven), TP-12 (eight) and TP-17 (seven). Four test points carry a single case each — TP-06,
+TP-09, TP-15 and TP-16.
 
 Case count is not a risk ranking, and this distribution is where that shows: TP-02 is `High` while
 TP-11 is `Critical`, yet the registration rules produce nearly twice as many cases. What drives the
@@ -273,7 +278,7 @@ drives execution order and priority (`docs/matriz-de-riesgo.md` §4), not the nu
 | Everything in §3 except TC-DB-08's deployment half | Yes, pytest | Cheap once the fixture exists, and re-runnable at no cost |
 | TC-DB-08 (DAO half) | Yes | A thread pool plus one connection per thread is a few lines |
 | TC-DB-08 (deployment half) | No — Phase 11 | Needs the real single-worker configuration; recorded as evidence, not asserted |
-| TC-E2E-01 … 04, TC-CLI-01 | Yes | The client separates transport from presentation exactly so this is testable from pytest |
+| TC-E2E-01 … 09, TC-CLI-01 | Yes | The client separates transport from presentation exactly so this is testable from pytest |
 | Evidence E-04, E-05, E-07 | Manual, with command captions | A browser page, a console session and a table inspection are the deliverable itself; the caption is what makes them reproducible |
 
 ---

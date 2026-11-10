@@ -238,3 +238,47 @@ immutable.
   would be flaky, and its absence is the decision, not an oversight.
 - **Closes:** nothing new. TP-07 is met as written; D-20 and D-21 are unaffected.
 
+### D-30 — 2026-11-10
+
+- **Decision:** The console client is two layers with one seam. `ApiDeTareas` owns the
+  transport (URL, `Authorization`, `timeout`, error translation) and receives its HTTP session
+  by parameter (`sesion=None` resolves to `requests.Session()`); `menu` owns the presentation and
+  takes `leer`/`escribir` by parameter too. The token lives only in `ApiDeTareas.token`. Every
+  call carries an explicit `timeout` (5 s). `POST /registro` and `POST /login` are sent with
+  `autenticada=False`, so they never carry the `Authorization` header; a `401` on any *other*
+  call clears the token in memory and the message asks the person to log in again, while a `401`
+  from `/login` is reported as bad credentials and touches no session state.
+- **Why:** RF-17 asks for one line and a non-zero exit on failure, and TP-17 asks that the
+  client's field names and status codes match `docs/api.md`. Neither can be asserted by typing at
+  a keyboard. The seam is what makes the client runnable from pytest against the real app through
+  `test_client`: production and tests exercise the same `_enviar`, so a wrong field name or a
+  missing `Bearer` fails the suite instead of the demo.
+- **Why this is not a speculative abstraction** (the YAGNI ⇄ SOLID gate in `AGENTS.md`): there is
+  a real second implementation — the test adapter over Flask's `test_client` — and it is the only
+  way to satisfy TC-E2E-01…04 without opening a port. No interface with a single implementation is
+  introduced: the client depends on the four method calls it actually uses
+  (`get`/`post`/`put`/`delete`) and on nothing else.
+- **Alternatives rejected:** (1) **Point `requests` at a live server** — the most faithful, and
+  the reason this phase also runs one manual session against a real server; rejected *for the
+  suite* because it needs a free port, a start wait and cleanup, which turns a fast test file into
+  a flaky one. (2) **Test only the presentation against a fake transport** — proves the menu and
+  nothing about the contract, which is exactly the bug TP-17 exists to catch (the client expects
+  `usuario` while the API answers `username`). (3) **`urllib.request` to avoid the dependency** —
+  one line less in `requirements.txt`, at the cost of `URLError` and `HTTPError` overlapping in the
+  same `except`. Rejected: the plan fixes `requests`, and `Session` reuses the connection across the
+  menu's calls.
+- **Exit code:** 1 if any operation failed during the session, 0 otherwise. A failure does not
+  close the program — the person corrects the input and continues — so the code summarizes the
+  session instead of aborting it. Input that ends (Ctrl+Z, closed pipe) exits with the same code
+  and without a traceback.
+- **Consequence accepted:** a wrong password or a deleted task sets the session's exit code to 1
+  even when the following operations succeed. Deliberate: RF-17 names the non-zero exit as the
+  machine-readable signal, and per-operation success is already on screen.
+- **What is *not* asserted:** the rendering of the real Windows console. `_configurar_utf8` forces
+  UTF-8 on `stdout`/`stderr` and one test pins that call, but whether `ñ` *looks* right in
+  `cmd.exe` depends on the terminal, so it is evidenced manually (E-05) rather than tested.
+- **Affects:** `cliente.py`, `tests/test_cliente.py`, `requirements.txt`.
+- **Closes:** RF-16, RF-17 and the client half of RNF-10. TC-CLI-01 keeps D-17's limitation
+  visible: `cerrar_sesion` is local and the token stays valid on the server until it expires, which
+  the README (Phase 9) has to state in words.
+
