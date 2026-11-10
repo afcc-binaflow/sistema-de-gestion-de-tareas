@@ -187,3 +187,54 @@ immutable.
 - **Affects:** `requirements.txt` (which declares the version), RNF-13 (its
   documented-version clause), and Phase 2.1, whose virtualenv must be created with 3.13.
   Also worth knowing when the deployment is set up.
+
+### D-29 — 2026-11-10
+
+- **Decision:** `POST /login` returns a byte-identical `401` for "user does not exist" and
+  "wrong password" — same status, same body, same `Content-Type` — and the **remaining
+  response-time difference is accepted as a documented residual risk**, not fixed. The measured
+  gap is real and large, and it is recorded here rather than left silent.
+- **Why:** TP-07 asks that the two failure causes be indistinguishable to the client, and the
+  contract's letter (`docs/api.md` §5) pins exactly three things: status, body bytes and the
+  `Content-Type`. All three are identical and are tested that way (TC-LOG-04). Closing the
+  timing channel, however, is a different change with a different cost: it makes every failed
+  login pay a full scrypt verification (~200 ms of CPU) even when no account exists — converting
+  a free, cheap request into an expensive one for the server. This project has no rate limiting
+  (it is explicitly out of scope per YAGNI), so the fix would add a denial-of-service lever that
+  does not exist today. Trading a hard-to-exploit information leak for an easy-to-exploit
+  resource exhaustion is not an improvement; it is a different problem.
+- **What was measured before deciding:** the reference implementation short-circuits —
+  `if guardado is None or not security.verificar_password(...)` — so an unknown username never
+  reaches scrypt. Measured through the test client, interleaved samples: **wrong password
+  median 335.7 ms vs unknown user median 1.1 ms, ratio ~296x**, with p95 434.7 ms vs 1.9 ms and
+  no overlap between the two distributions. A single `check_password_hash` on werkzeug's default
+  `scrypt:32768:8:1` costs ~196 ms, which is the whole gap. The measurement was repeated
+  independently and reproduced. This is not a hypothetical channel: it is deterministic and
+  measurable from a single machine.
+- **What the contract does and does not cover:** `docs/api.md` §5 fixes *what* the client reads,
+  and forbids distinguishing the causes in the body. It says nothing about timing, and the
+  project has no requirement about side-channel resistance. So this is genuinely an accepted
+  risk, not a contract breach — but calling it "compliant" without saying *which* observable
+  channel remains open would be dishonest, and that is what this entry prevents.
+- **Alternatives rejected:** (1) **Always verify against a decoy hash** — technically the correct
+  fix, closes the channel completely, and it was the option favored on pure security grounds.
+  Rejected because it imposes a fixed ~200 ms CPU cost per failed login with no rate limiting to
+  bound the amplification, in a project whose brief defines no availability requirement and
+  whose deployment is a shared free-tier host. (2) **Add rate limiting plus the decoy hash** —
+  the complete answer, but rate limiting is explicitly out of scope (YAGNI section of
+  `AGENTS.md`), so it would be scope expansion decided by the implementer rather than by a
+  requirement. (3) **Sleep a fixed interval on the fast path** — makes the two paths equal in
+  time without the CPU cost, but it is a timing patch that only works while the slow path stays
+  slower than the sleep, and it silently breaks the moment hashing parameters change.
+- **Consequence accepted:** an attacker who can time the endpoint can determine whether a given
+  username exists, at roughly 200 ms per probe of added noise once network jitter is in play.
+  No credential, no hash and no account content is exposed by this, and the login stays
+  rate-unlimited by design. If this project ever gets an availability requirement or a public
+  deployment under real traffic, the correct order is: rate limiting first, then a decoy hash —
+  both together, not the decoy alone.
+- **Affects:** the docstring of `routes.py::iniciar_sesion` and the module docstring of
+  `tests/test_login.py`, which both state the limit so nobody later mistakes the passing suite
+  for a closed channel. No test asserts anything about timing, deliberately: a timing assertion
+  would be flaky, and its absence is the decision, not an oversight.
+- **Closes:** nothing new. TP-07 is met as written; D-20 and D-21 are unaffected.
+
