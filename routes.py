@@ -28,6 +28,32 @@ def bienvenida():
     return render_template("bienvenida.html")
 
 
+def _validar_credenciales(datos):
+    """Valida el par (usuario, contraseña) que comparten `/registro` y `/login`.
+
+    Es la MISMA regla en los dos endpoints (docs/api.md §4.1, §4.2 y §6), asi que
+    vive en un solo lugar: duplicada, el dia que cambie un mensaje se cambia en
+    uno solo y el otro empieza a mentir.
+
+    Devuelve `((usuario_sin_espacios, contrasena), None)` cuando es valido, o
+    `(None, mensaje)` cuando no lo es, con el texto exacto de un 400.
+    `contraseña` no se recorta nunca (D-21): recortarla en silencio le cambia la
+    credencial al usuario. `usuario` si se recorta, porque es un nombre.
+    """
+    if not isinstance(datos, dict):
+        return None, "El cuerpo debe ser un objeto JSON"
+
+    usuario = datos.get("usuario")
+    contrasena = datos.get("contraseña")
+
+    if not isinstance(usuario, str) or not usuario.strip():
+        return None, "El campo 'usuario' es obligatorio y debe ser un texto no vacío"
+    if not isinstance(contrasena, str) or not contrasena:
+        return None, "El campo 'contraseña' es obligatorio y debe ser un texto no vacío"
+
+    return (usuario.strip(), contrasena), None
+
+
 def registrar():
     """Crea una cuenta: valida, hashea y delega el alta en el DAO.
 
@@ -43,22 +69,11 @@ def registrar():
       capa de datos (RF-04, TP-05).
     """
     datos = request.get_json(silent=True)
-    if not isinstance(datos, dict):
-        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
+    credenciales, error = _validar_credenciales(datos)
+    if error:
+        return jsonify({"error": error}), 400
 
-    usuario = datos.get("usuario")
-    contrasena = datos.get("contraseña")
-
-    if not isinstance(usuario, str) or not usuario.strip():
-        return jsonify(
-            {"error": "El campo 'usuario' es obligatorio y debe ser un texto no vacío"}
-        ), 400
-    if not isinstance(contrasena, str) or not contrasena:
-        return jsonify(
-            {"error": "El campo 'contraseña' es obligatorio y debe ser un texto no vacío"}
-        ), 400
-
-    usuario = usuario.strip()
+    usuario, contrasena = credenciales
     try:
         repository.crear_usuario(
             obtener_conexion(), usuario, security.hashear_password(contrasena)
@@ -81,26 +96,22 @@ def iniciar_sesion():
     `security.crear_token`: el modulo de seguridad no conoce Flask ni la config,
     y la capa HTTP es la que sabe de donde sale el secreto. Sin esto, la clave
     configurada por la app se ignoraba y solo valia la del entorno.
+
+    **Limite conocido y aceptado (D-29).** El `or` corta en corto: con el usuario
+    inexistente no se ejecuta `verificar_password`, asi que la respuesta llega en
+    ~1 ms contra ~336 ms de una password incorrecta. Por el cuerpo las dos causas
+    son indistinguibles, por el reloj no. Se mide y se acepta: cerrarlo cuesta
+    ~200 ms de CPU en cada login fallido, lo que agrega una palanca de DoS que
+    hoy no existe, y este proyecto no tiene rate limiting por YAGNI.
     """
     datos = request.get_json(silent=True)
-    if not isinstance(datos, dict):
-        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
+    credenciales, error = _validar_credenciales(datos)
+    if error:
+        return jsonify({"error": error}), 400
 
-    usuario = datos.get("usuario")
-    contrasena = datos.get("contraseña")
+    usuario, contrasena = credenciales
 
-    if not isinstance(usuario, str) or not usuario.strip():
-        return jsonify(
-            {"error": "El campo 'usuario' es obligatorio y debe ser un texto no vacío"}
-        ), 400
-    if not isinstance(contrasena, str) or not contrasena:
-        return jsonify(
-            {"error": "El campo 'contraseña' es obligatorio y debe ser un texto no vacío"}
-        ), 400
-
-    guardado = repository.buscar_usuario_por_nombre(
-        obtener_conexion(), usuario.strip()
-    )
+    guardado = repository.buscar_usuario_por_nombre(obtener_conexion(), usuario)
     if guardado is None or not security.verificar_password(
         guardado["password_hash"], contrasena
     ):
@@ -118,8 +129,20 @@ def recurso_no_encontrado(error):
 
 
 def metodo_no_permitido(error):
-    """405 en JSON. Flask responde HTML por defecto (TP-22)."""
-    return jsonify({"error": "Método no permitido"}), 405
+    """405 en JSON, con el header `Allow` que exige la RFC 7231 §6.5.5.
+
+    Flask responde HTML por defecto (TP-22). El `Allow` no es decorativo: sin el,
+    el cliente no sabe que metodo **si** funciona y no tiene como corregir la
+    llamada salvo leyendo la documentacion. `valid_methods` lo calcula Werkzeug a
+    partir de la regla registrada, asi que la lista no se puede desincronizar.
+    """
+    respuesta = jsonify({"error": "Método no permitido"})
+    respuesta.status_code = 405
+
+    metodos = getattr(error, "valid_methods", None)
+    if metodos:
+        respuesta.headers["Allow"] = ", ".join(metodos)
+    return respuesta
 
 
 def error_no_controlado(error):

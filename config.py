@@ -25,8 +25,10 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY")
     DATABASE = os.environ.get("DATABASE_PATH", str(RUTA_BASE_POR_DEFECTO))
 
-    # D-20: el token vive 8 horas.
-    HORAS_EXPIRACION_TOKEN = 8
+    # La duracion del token (D-20) NO vive aca: vive en `security.py`, que es
+    # quien la usa. Tenerla en los dos lados crea dos fuentes de verdad y deja
+    # una trampa: cambiar `app.config["HORAS_EXPIRACION_TOKEN"]` no cambiaria
+    # nada, porque `crear_token` nunca lee la config.
 
     TESTING = False
 

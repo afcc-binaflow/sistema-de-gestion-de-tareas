@@ -56,13 +56,13 @@ def test_dos_apps_no_comparten_configuracion():
     """
 
     class ConfigTestAlternativa(ConfigTest):
-        HORAS_EXPIRACION_TOKEN = 1
+        SECRET_KEY = "otra-clave-de-tests-distinta-de-32-bytes-o-mas"
 
     una = create_app(ConfigTest)
     otra = create_app(ConfigTestAlternativa)
 
-    assert una.config["HORAS_EXPIRACION_TOKEN"] == 8
-    assert otra.config["HORAS_EXPIRACION_TOKEN"] == 1
+    assert una.config["SECRET_KEY"] != otra.config["SECRET_KEY"]
+    assert una.config["DATABASE"] == otra.config["DATABASE"]
 
 
 def test_la_app_falla_sin_secret_key(monkeypatch):

@@ -8,15 +8,22 @@ cosas distintas, y no protege de nada.
 
 El login emite el token, asi que estas pruebas tambien fijan lo que la Fase 7 va
 a consumir: `sub`, `exp` y que el payload no lleve credenciales.
-"""
 
-import json
+**Lo que estos tests NO cubren, a proposito (D-29).** TP-07 se cumple en lo que
+el contrato fija —status, cuerpo y `Content-Type` identicos— pero el *tiempo*
+sigue delatando la causa: con el usuario inexistente no se ejecuta
+`verificar_password`, asi que la respuesta llega en milisegundos contra cientos
+de una password incorrecta. Se midio (336 ms vs 1,1 ms, 296x, sin solapamiento)
+y se acepto como riesgo residual. Ningun test de aca puede fingir que ese canal
+no existe: lo que se prueba es el contrato, y el contrato no habla de tiempos.
+"""
 
 import security
 from db import obtener_conexion
 from repository import buscar_usuario_por_nombre
 
 CREDENCIALES = {"usuario": "juan", "contraseña": "1234"}
+MENSAJE_401 = "Usuario o contraseña incorrectos"
 
 
 def _error(respuesta):
@@ -60,7 +67,9 @@ def test_login_con_contrasena_incorrecta_devuelve_401(client):
     respuesta = client.post("/login", json={"usuario": "juan", "contraseña": "otra"})
 
     assert respuesta.status_code == 401
-    _error(respuesta)
+    # El literal, no solo la forma: el contrato fija el mensaje y un test que
+    # solo afirma `{"error": ...}` deja pasar un cambio de texto sin ruido.
+    assert _error(respuesta) == MENSAJE_401
 
 
 def test_login_con_usuario_inexistente_devuelve_401(client):
@@ -87,6 +96,9 @@ def test_los_dos_401_son_byte_a_byte_identicos(client):
     assert contrasena_mala.status_code == 401
     assert contrasena_mala.get_data() == usuario_inexistente.get_data()
     assert contrasena_mala.mimetype == usuario_inexistente.mimetype
+    # Comparar dos respuestas entre si pasa aunque las dos esten mal: el cuerpo
+    # esperado se afirma por separado.
+    assert contrasena_mala.get_json() == {"error": MENSAJE_401}
 
 
 # ---------------------------------------------------------------------------

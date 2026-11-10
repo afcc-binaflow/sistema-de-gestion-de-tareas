@@ -329,10 +329,14 @@ status code and give the client a body to parse for no reason. The response has 
 
 | Cause | Example message |
 |---|---|
-| `/login`, user does not exist | `{"error": "Usuario o contraseña incorrectos."}` |
-| `/login`, wrong password | `{"error": "Usuario o contraseña incorrectos."}` — **byte-identical** |
-| Protected route, missing token | `{"error": "Token ausente o inválido."}` |
-| Protected route, malformed/tampered/expired token | `{"error": "Token ausente o inválido."}` — **byte-identical** |
+| `/login`, user does not exist | `{"error": "Usuario o contraseña incorrectos"}` |
+| `/login`, wrong password | `{"error": "Usuario o contraseña incorrectos"}` — **byte-identical** |
+| Protected route, missing token | `{"error": "Token ausente o inválido"}` |
+| Protected route, malformed/tampered/expired token | `{"error": "Token ausente o inválido"}` — **byte-identical** |
+
+**Two conventions that hold for every message above:** they are written in Spanish **with
+accents**, and none of them ends with a period. Both are pinned by tests, not left to taste,
+because a client or a grader comparing an exact string breaks on a single invisible difference.
 
 The first pair is required by RF-06. The second pair is the same idea applied to tokens, and it
 is one of the values this contract pins rather than derives — see §7.

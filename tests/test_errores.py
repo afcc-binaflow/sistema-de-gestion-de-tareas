@@ -36,6 +36,15 @@ def test_metodo_no_permitido_devuelve_405_json(client):
     assert respuesta.get_json() == {"error": "Método no permitido"}
 
 
+def test_metodo_no_permitido_informa_los_metodos_validos(client):
+    """RFC 7231 §6.5.5: un 405 lleva `Allow`, y sin el el cliente no sabe que hacer."""
+    respuesta = client.get("/login")
+
+    assert respuesta.status_code == 405
+    assert "Allow" in respuesta.headers
+    assert "POST" in respuesta.headers["Allow"]
+
+
 # ---------------------------------------------------------------------------
 # TC-ERR-01 (TP-16): 500 en JSON, sin traceback y logueado
 # ---------------------------------------------------------------------------

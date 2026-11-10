@@ -11,7 +11,13 @@ import time
 import jwt
 import pytest
 
-from security import crear_token, decodificar_token, hashear_password, verificar_password
+from security import (
+    HORAS_EXPIRACION_TOKEN,
+    crear_token,
+    decodificar_token,
+    hashear_password,
+    verificar_password,
+)
 
 CLAVE = "clave-solo-para-tests-de-seguridad-32b"
 
@@ -91,6 +97,23 @@ def test_token_expirado_falla():
     token = crear_token(42, clave=CLAVE, exp=int(time.time()) - 10)
     with pytest.raises(jwt.ExpiredSignatureError):
         decodificar_token(token, clave=CLAVE)
+
+
+# ---------------------------------------------------------------------------
+# Token: la expiracion es de 8 horas (TC-TOK-01, D-20)
+# ---------------------------------------------------------------------------
+def test_el_token_expira_a_las_ocho_horas():
+    """D-20 fija 8 h. Se afirma la **diferencia**, no `exp` contra el reloj.
+
+    Un `exp` calculado por `time.time()` no se puede comparar con un valor fijo:
+    el test se volveria dependiente del momento en que corre. La resta `exp -
+    iat` es la duracion real del token y no envejece.
+    """
+    token = crear_token(42, clave=CLAVE)
+    payload = decodificar_token(token, clave=CLAVE)
+
+    assert payload["exp"] - payload["iat"] == HORAS_EXPIRACION_TOKEN * 3600
+    assert payload["exp"] - payload["iat"] == 28800
 
 
 # ---------------------------------------------------------------------------
