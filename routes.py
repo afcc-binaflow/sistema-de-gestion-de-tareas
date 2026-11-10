@@ -51,11 +51,11 @@ def registrar():
 
     if not isinstance(usuario, str) or not usuario.strip():
         return jsonify(
-            {"error": "El campo 'usuario' es obligatorio y debe ser un texto no vacio"}
+            {"error": "El campo 'usuario' es obligatorio y debe ser un texto no vacío"}
         ), 400
     if not isinstance(contrasena, str) or not contrasena:
         return jsonify(
-            {"error": "El campo 'contraseña' es obligatorio y debe ser un texto no vacio"}
+            {"error": "El campo 'contraseña' es obligatorio y debe ser un texto no vacío"}
         ), 400
 
     usuario = usuario.strip()
@@ -76,7 +76,7 @@ def recurso_no_encontrado(error):
 
 def metodo_no_permitido(error):
     """405 en JSON. Flask responde HTML por defecto (TP-22)."""
-    return jsonify({"error": "Metodo no permitido"}), 405
+    return jsonify({"error": "Método no permitido"}), 405
 
 
 def error_no_controlado(error):

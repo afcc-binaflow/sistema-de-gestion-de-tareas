@@ -4,8 +4,9 @@
 client (Phase 8), the test suite (Phases 2.4 onward), and the grader's `curl`. Written
 **before** the code that implements it, on purpose — see "Why this document exists first".
 
-**Status.** Phase 1.2. Six of the eight endpoints are **specified, not yet implemented**.
-`GET /tareas` is the only one already running (Phase 1.1).
+**Status.** Phase 1.2 wrote this contract; implementation advances phase by phase.
+`GET /tareas` (Phase 1.1), the JSON error handlers and `POST /registro` (Phase 5) are
+running. The remaining six endpoints are **specified, not yet implemented**.
 
 **Satisfies:** every functional requirement in `docs/requisitos.md` (RF-01 … RF-17), the
 status-code requirement RNF-04, and decisions D-04 revisada, D-06, D-07, D-09, D-10, D-11,

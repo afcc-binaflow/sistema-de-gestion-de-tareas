@@ -19,7 +19,13 @@ CREDENCIALES = {"usuario": "juan", "contraseña": "1234"}
 
 
 def _error(respuesta):
-    """Afirma la forma unica de error del contrato y devuelve el mensaje."""
+    """Afirma la forma unica de error del contrato y devuelve el mensaje.
+
+    Incluye el `Content-Type`: el contrato pide JSON en **toda** respuesta de
+    error (TC-ERR-05). Un cuerpo JSON servido como `text/html` rompe al cliente
+    igual que un cuerpo HTML.
+    """
+    assert respuesta.mimetype == "application/json"
     cuerpo = respuesta.get_json()
     assert isinstance(cuerpo, dict)
     assert set(cuerpo) == {"error"}
@@ -133,6 +139,13 @@ def test_registro_con_content_type_erroneo_devuelve_400(client):
     _error(respuesta)
 
 
+def test_registro_sin_content_type_devuelve_400(client):
+    respuesta = client.post("/registro", data=json.dumps(CREDENCIALES))
+
+    assert respuesta.status_code == 400
+    _error(respuesta)
+
+
 def test_registro_con_json_truncado_devuelve_400(client):
     respuesta = client.post(
         "/registro",
@@ -193,6 +206,11 @@ def test_registro_no_devuelve_el_hash_ni_la_contrasena(client):
     assert "1234" not in cuerpo
     assert "contraseña" not in cuerpo
 
+    # El contrato dice "en ninguna clave ni header" (TC-REG-13).
+    cabeceras = " ".join(f"{clave}: {valor}" for clave, valor in respuesta.headers.items())
+    assert "password_hash" not in cabeceras
+    assert "1234" not in cabeceras
+
 
 # ---------------------------------------------------------------------------
 # TP-04: la password queda hasheada en la base, no en texto plano
@@ -227,6 +245,13 @@ def test_registro_no_interpreta_sql_del_usuario(client, app):
 # ---------------------------------------------------------------------------
 def test_get_registro_devuelve_405(client):
     respuesta = client.get("/registro")
+
+    assert respuesta.status_code == 405
+    _error(respuesta)
+
+
+def test_put_registro_devuelve_405(client):
+    respuesta = client.put("/registro", json=CREDENCIALES)
 
     assert respuesta.status_code == 405
     _error(respuesta)

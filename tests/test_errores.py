@@ -33,7 +33,7 @@ def test_metodo_no_permitido_devuelve_405_json(client):
     respuesta = client.post("/tareas")
 
     assert respuesta.status_code == 405
-    assert respuesta.get_json() == {"error": "Metodo no permitido"}
+    assert respuesta.get_json() == {"error": "Método no permitido"}
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,8 @@ def test_error_no_controlado_devuelve_500_json_sin_traceback(client, monkeypatch
     cuerpo = respuesta.get_data(as_text=True)
     assert "falla interna del dao" not in cuerpo
     assert "Traceback" not in cuerpo
-    assert "route" not in cuerpo.lower()
+    assert "routes.py" not in cuerpo
+    assert "instance" not in cuerpo
 
     # El detalle no se pierde: queda en el log del servidor.
     assert "falla interna del dao" in caplog.text
