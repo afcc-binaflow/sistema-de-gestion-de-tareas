@@ -65,22 +65,17 @@ def obtener_tarea_de(conexion, tarea_id, usuario_id):
     return _a_tarea(fila) if fila is not None else None
 
 
-def actualizar_tarea_de(conexion, tarea_id, usuario_id, titulo=None, completada=None):
-    """Actualiza titulo y/o completada. Devuelve True si se modifico una fila."""
-    campos = []
-    valores = []
-    if titulo is not None:
-        campos.append("titulo = ?")
-        valores.append(titulo)
-    if completada is not None:
-        campos.append("completada = ?")
-        valores.append(1 if completada else 0)
-    if not campos:
-        return False
-    valores.extend([tarea_id, usuario_id])
+def actualizar_tarea_de(conexion, tarea_id, usuario_id, titulo, completada):
+    """Reemplaza titulo y completada de una tarea. True si se modifico una fila.
+
+    `PUT` es reemplazo completo (docs/api.md §4.5, D-17): el contrato exige los
+    dos campos, asi que no hay actualizacion parcial. Aceptar `None` como "no
+    toques este campo" seria una segunda semantica que ningun cliente pide y que
+    ningun test ejercita; la rama quedaba inalcanzable desde `routes`.
+    """
     cursor = conexion.execute(
-        "UPDATE tareas SET " + ", ".join(campos) + " WHERE id = ? AND usuario_id = ?",
-        valores,
+        "UPDATE tareas SET titulo = ?, completada = ? WHERE id = ? AND usuario_id = ?",
+        (titulo, 1 if completada else 0, tarea_id, usuario_id),
     )
     conexion.commit()
     return cursor.rowcount > 0
