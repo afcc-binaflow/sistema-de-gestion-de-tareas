@@ -90,16 +90,18 @@ def inicializar(conexion):
     conexion.commit()
 
 
-def init_db(app=None):
+def init_db(app):
     """Inicializa el esquema de la aplicacion.
+
+    Recibe la app de forma explicita: `current_app` solo existe dentro de un
+    contexto de aplicacion, y esta funcion corre al construirla, antes de que
+    haya ninguno abierto.
 
     Para bases en archivo, abre una conexion, crea las tablas y la cierra: el
     archivo persiste en disco. Para bases en memoria, mantiene una conexion
     viva en la app, porque SQLite destruye una base `:memory:` cuando se cierra
     la ultima conexion que la referencia.
     """
-    if app is None:
-        app = current_app
     if app.config["DATABASE"] == ":memory:":
         conexion = conectar(":memory:")
         inicializar(conexion)
