@@ -69,6 +69,49 @@ def registrar():
     return jsonify({"usuario": usuario}), 201
 
 
+def iniciar_sesion():
+    """Verifica credenciales y emite el token (docs/api.md §4.2).
+
+    El UNICO camino de error del login es un solo 401 con el mismo cuerpo, tanto
+    si el usuario no existe como si la contraseña esta mal (TP-07). Diferenciar
+    los mensajes convierte el login en un buscador de usuarios validos: quien
+    pregunta "existe juan?" obtiene la respuesta gratis.
+
+    La `SECRET_KEY` se toma de la configuracion de la app y se pasa explicita a
+    `security.crear_token`: el modulo de seguridad no conoce Flask ni la config,
+    y la capa HTTP es la que sabe de donde sale el secreto. Sin esto, la clave
+    configurada por la app se ignoraba y solo valia la del entorno.
+    """
+    datos = request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify({"error": "El cuerpo debe ser un objeto JSON"}), 400
+
+    usuario = datos.get("usuario")
+    contrasena = datos.get("contraseña")
+
+    if not isinstance(usuario, str) or not usuario.strip():
+        return jsonify(
+            {"error": "El campo 'usuario' es obligatorio y debe ser un texto no vacío"}
+        ), 400
+    if not isinstance(contrasena, str) or not contrasena:
+        return jsonify(
+            {"error": "El campo 'contraseña' es obligatorio y debe ser un texto no vacío"}
+        ), 400
+
+    guardado = repository.buscar_usuario_por_nombre(
+        obtener_conexion(), usuario.strip()
+    )
+    if guardado is None or not security.verificar_password(
+        guardado["password_hash"], contrasena
+    ):
+        return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
+
+    token = security.crear_token(
+        guardado["id"], clave=current_app.config["SECRET_KEY"]
+    )
+    return jsonify({"token": token}), 200
+
+
 def recurso_no_encontrado(error):
     """404 en JSON. Flask responde HTML por defecto (TP-22)."""
     return jsonify({"error": "Recurso no encontrado"}), 404
@@ -100,6 +143,7 @@ def registrar_rutas(app):
     """
     app.add_url_rule("/tareas", view_func=bienvenida, methods=["GET"])
     app.add_url_rule("/registro", view_func=registrar, methods=["POST"])
+    app.add_url_rule("/login", view_func=iniciar_sesion, methods=["POST"])
 
     # Fase 7.5 adelantada a la Fase 5: sin estos tres manejadores, 404, 405 y
     # 500 rompen el contrato JSON y el 500 expone el traceback.
