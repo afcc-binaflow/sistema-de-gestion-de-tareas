@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PFO 2 — Gestor de tareas (API REST + SQLite + JWT)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+           max-width: 820px; margin: 2rem auto; padding: 0 1.25rem; line-height: 1.6; color: #222; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: .4rem; }
+    h2 { margin-top: 2rem; color: #333; }
+    code { background: #f3f3f3; padding: .15rem .35rem; border-radius: 4px; font-size: .92em; }
+    pre { background: #f3f3f3; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: .5rem .7rem; text-align: left; }
+    th { background: #eee; }
+    a { color: #0366d6; }
+    .badge { display: inline-block; background: #2ea44f; color: #fff; padding: .2rem .6rem;
+             border-radius: 12px; font-size: .85rem; margin-right: .4rem; }
+    footer { margin-top: 3rem; color: #666; font-size: .85rem; border-top: 1px solid #ddd; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+
+<h1>PFO 2 — Sistema de gestión de tareas</h1>
+<p>
+  <span class="badge">Flask</span>
+  <span class="badge">SQLite</span>
+  <span class="badge">JWT (HS256)</span>
+  <span class="badge">Python 3.13</span>
+</p>
+<p>
+  API REST para gestionar tareas personales, con autenticación por JWT, persistencia en
+  SQLite y un cliente de consola. Trabajo práctico de la materia Redes / TSDS.
+</p>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Registro e inicio de sesión con contraseñas hasheadas (scrypt, vía Werkzeug).</li>
+  <li>CRUD completo de tareas por usuario: cada usuario ve y modifica solo las suyas.</li>
+  <li>Aislamiento por propietario aplicado en la consulta SQL (<code>WHERE usuario_id = ?</code>), no filtrando después.</li>
+  <li>Token JWT de 8 horas, firmado con <code>SECRET_KEY</code> del entorno, que viaja en el header <code>Authorization: Bearer</code>.</li>
+  <li>Cliente de consola con dos capas (transporte + presentación), timeout explícito y un solo mensaje de error por línea.</li>
+  <li>Página de bienvenida pública y sin datos (<code>GET /tareas</code>).</li>
+</ul>
+
+<h2>Arquitectura</h2>
+<pre>servidor.py  ->  create_app(config)
+   ├── config.py       (lee os.environ: SECRET_KEY, DATABASE_PATH)
+   ├── db.py           (conexión, esquema, init_db)
+   ├── repository.py   (DAO: todo el SQL)
+   ├── routes.py       (capa HTTP: parsear, llamar, responder)
+   └── security.py     (hashing + JWT)
+
+cliente.py  ->  ApiDeTareas (transporte) + menu (presentación)</pre>
+
+<h2>Endpoints</h2>
+<table>
+  <tr><th>Método</th><th>Ruta</th><th>Auth</th><th>Para qué</th></tr>
+  <tr><td>GET</td><td>/tareas</td><td>no</td><td>Página de bienvenida (HTML)</td></tr>
+  <tr><td>POST</td><td>/registro</td><td>no</td><td>Crear cuenta</td></tr>
+  <tr><td>POST</td><td>/login</td><td>no</td><td>Obtener JWT (<code>{"token": "..."}</code>)</td></tr>
+  <tr><td>GET</td><td>/api/tareas</td><td>Bearer</td><td>Listar las tareas del usuario</td></tr>
+  <tr><td>POST</td><td>/api/tareas</td><td>Bearer</td><td>Crear tarea</td></tr>
+  <tr><td>GET</td><td>/api/tareas/&lt;id&gt;</td><td>Bearer</td><td>Leer una tarea</td></tr>
+  <tr><td>PUT</td><td>/api/tareas/&lt;id&gt;</td><td>Bearer</td><td>Reemplazar una tarea</td></tr>
+  <tr><td>DELETE</td><td>/api/tareas/&lt;id&gt;</td><td>Bearer</td><td>Borrar una tarea (204, sin cuerpo)</td></tr>
+</table>
+<p>Contrato completo en <a href="api.md">docs/api.md</a>.</p>
+
+<h2>Cómo correrlo</h2>
+<pre># 1. Entorno
+python3.13 -m venv venv
+source venv/bin/activate          # o .\venv\Scripts\Activate.ps1 en Windows
+
+# 2. Dependencias
+pip install -r requirements.txt
+
+# 3. Configurar el secreto
+export SECRET_KEY="un-valor-largo-y-aleatorio"   # PowerShell: $env:SECRET_KEY = "..."
+
+# 4. Servidor (desarrollo)
+python servidor.py                # http://127.0.0.1:5000
+
+# 5. Cliente de consola (en otra terminal)
+python cliente.py</pre>
+
+<h2>Tests</h2>
+<p>
+  156 tests, 99 % de cobertura. Suite completa en <code>tests/</code>, con base en memoria
+  (no toca <code>instance/pfo2.db</code>).
+</p>
+<pre>python -m pytest -q
+python -m pytest -q --cov=cliente --cov=config --cov=db --cov=repository \
+  --cov=routes --cov=security --cov=servidor --cov-report=term-missing</pre>
+<p>Evidencia reproducible en <a href="evidencias/README.md">docs/evidencias/</a>.</p>
+
+<h2>Documentación</h2>
+<ul>
+  <li><a href="api.md">docs/api.md</a> — contrato completo de la API.</li>
+  <li><a href="requisitos.md">docs/requisitos.md</a> — requisitos funcionales y no funcionales.</li>
+  <li><a href="trazabilidad.md">docs/trazabilidad.md</a> — matriz de trazabilidad, escaneo de secretos, veredicto.</li>
+  <li><a href="decisiones.md">docs/decisiones.md</a> — bitácora de decisiones (D-01 … D-30).</li>
+  <li><a href="conceptuales.md">docs/conceptuales.md</a> — respuestas conceptuales (hashing y SQLite).</li>
+  <li><a href="https://github.com/afcc-binaflow/sistema-de-gestion-de-tareas">Repositorio en GitHub</a></li>
+</ul>
+
+<h2>Respuestas conceptuales (resumen)</h2>
+<p>
+  <strong>¿Por qué hashear contraseñas?</strong> Para que una filtración de la base no entregue
+  credenciales usables: el hash es irreversible, lleva salt aleatorio (dos hashes iguales de la
+  misma contraseña son distintos) y no tiene clave que filtrar, a diferencia del cifrado
+  reversible. Ver <a href="conceptuales.md">la respuesta completa</a>.
+</p>
+<p>
+  <strong>Ventajas de SQLite en este proyecto:</strong> cero configuración (viene en la stdlib),
+  todo en un archivo, transaccional (ACID), ideal para desarrollo y baja concurrencia. Su
+  limitación son las escrituras concurrentes (<code>database is locked</code>) y el filesystem
+  efímero del hosting. Ver <a href="conceptuales.md">la respuesta completa</a>.
+</p>
+
+<footer>
+  PFO 2 — TSDS/Redes. Código fuente y documentación en
+  <a href="https://github.com/afcc-binaflow/sistema-de-gestion-de-tareas">GitHub</a>.
+</footer>
+
+</body>
+</html>

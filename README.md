@@ -320,6 +320,8 @@ PFO2/
   status code catalogue.
 - [`docs/requisitos.md`](docs/requisitos.md) — every functional and
   non-functional requirement.
+- [`docs/conceptuales.md`](docs/conceptuales.md) — conceptual answers required by the assignment
+  (why hash passwords, advantages of SQLite), each anchored in the code.
 - [`docs/trazabilidad.md`](docs/trazabilidad.md) — forward and reverse
   traceability matrix, secret scan of the whole history, residual risk and the
   Phase 9 verdict.
