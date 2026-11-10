@@ -193,9 +193,15 @@ Asserted against a connection, not through HTTP: these properties are invisible 
 | TC-DB-06 | TP-04 | Inspection | register through the API, then read `password_hash` from the table | the stored value differs from the plaintext (this is the only proof; the API never shows it) |
 | TC-DB-07 | TP-11 | Isolation | `listar_tareas_de(A)` while B has tasks | only A's rows — the filter is in the `WHERE`, not in Python |
 | TC-DB-08 | TP-15 | Concurrency | N threads each open their own connection and write | every write lands; no corruption; no `database is locked` inside the configured limit |
+| TC-DB-09 | TP-20 | Use case | `create_app` against a database **file** in a directory that does not exist yet | the directory and the file are created; register then log in, in two separate requests, both succeed (the schema survived the connection close) |
 
 *TC-DB-08 is written in Phase 3 against the DAO, but the property that matters in production —
 one worker with threads, RNF-16 — is re-verified against the deployment in Phase 11.*
+
+*TC-DB-09 is the only case here that goes through `create_app`: the file branch of `db.init_db`
+and the directory creation in `servidor.create_app` exist only in the app lifecycle. Without it,
+the half of `db.py` that production actually runs was never executed by the suite (added in
+Phase 9).*
 
 ### 3.7 Security unit — `tests/test_seguridad.py` (Phase 4)
 
@@ -204,14 +210,21 @@ one worker with threads, RNF-16 — is re-verified against the deployment in Pha
 | TC-SEG-01 | TP-04 | Irreversibility | `hashear_password("1234")` | differs from `"1234"` |
 | TC-SEG-02 | TP-04 | Salt | hash the same password twice | the two hashes differ |
 | TC-SEG-03 | TP-04 | Equivalence | `verificar_password` with the right and the wrong password | `True`, then `False` |
+| TC-SEG-04 | TP-04 | Fault injection | sign a token with no explicit key and no `SECRET_KEY` in the environment | `RuntimeError` naming `SECRET_KEY` — never a token signed with an empty key |
+| TC-SEG-05 | TP-04 | Equivalence | sign a token with no explicit key and `SECRET_KEY` set | the token decodes and carries the right `sub` (the environment is the second, documented source of the key) |
 
-### 3.8 Welcome page — `tests/test_bienvenida.py` (Phase 1.1, extended)
+### 3.8 Welcome page — `tests/test_bienvenida.py` (written in Phase 9)
 
 | ID | TP | Technique | Given / When | Expected |
 |---|---|---|---|---|
 | TC-HTML-01 | TP-21 | Equivalence | `GET /tareas` with no headers | 200 and `Content-Type: text/html; charset=utf-8` |
-| TC-HTML-02 | TP-21 | Negative scan | same, with a database that has users and tasks | body contains no username, no task title and no task id |
+| TC-HTML-02 | TP-21 | Negative scan | the same request **before and after** creating a user and a task | the two bodies are byte-identical, and neither contains the username nor the task title |
 | TC-HTML-03 | TP-01 | Decision | `POST /tareas` | 405 |
+
+*Phase 9 note: this file was named by the catalog since Phase 1.6 but did not exist until Phase 9,
+so TP-21 had a case on paper and no test behind it. TC-HTML-02 compares the rendered bytes instead
+of scanning for a task id: the template contains digits (`initial-scale=1`), and a body that does
+not change when data appears is the property that actually matters.*
 
 ### 3.9 Encoding — `tests/test_encoding.py` (Phase 5–8)
 
@@ -219,7 +232,7 @@ one worker with threads, RNF-16 — is re-verified against the deployment in Pha
 |---|---|---|---|---|
 | TC-ENC-01 | TP-23 | Use case | register and log in with `contraseña: "contraseña"` (real `ñ`) | 201 then 200; the byte sequence that comes back is UTF-8, not `\u00f1` and not `cp1252` |
 
-### 3.10 Console client E2E — `tests/test_cliente.py` (Phase 8)
+### 3.10 Console client E2E — `tests/test_cliente.py` (Phase 8–9)
 
 | ID | TP | Technique | Given / When | Expected |
 |---|---|---|---|---|
@@ -232,6 +245,9 @@ one worker with threads, RNF-16 — is re-verified against the deployment in Pha
 | TC-E2E-07 | TP-17 | Boundary | a session with one failed operation, then a clean session | exit code 1, then exit code 0 |
 | TC-E2E-08 | TP-17 | Negative | unparseable input: id `abc`, `completada` = `tal vez`, option `99` | one line, no traceback, and the session keeps running |
 | TC-E2E-09 | TP-23 | State | a `ñ` password (`contraseña`) through register and log in, and the client's output stream | the password round-trips and the stream is forced to UTF-8 |
+| TC-E2E-10 | TP-17 | Fault injection | the API (or a proxy in front of it) answers an error with an HTML body, then with a JSON body that has no `error` field | one line each — `la respuesta no es JSON` and `la respuesta no trae el campo 'error'` — never a `JSONDecodeError` traceback |
+| TC-E2E-11 | TP-17 | Configuration | `PFO2_API_URL` set, then `principal()` | the `ApiDeTareas` it builds points at that URL; `menu` is what decides the exit code |
+| TC-E2E-12 | TP-17 | State | any of list, create, edit, delete chosen with no session | one message, **zero HTTP requests**, and the session keeps running |
 
 ### 3.11 Documented limitation — `tests/test_cliente.py` (Phase 8)
 
@@ -252,15 +268,15 @@ Every test point has at least one case, and every case names a test point:
 | Token and auth | TC-TOK-01 … 06, TC-AUT-01 … 06 | TP-01, TP-05, TP-08, TP-09, TP-10, TP-21 |
 | Task CRUD | TC-TAR-01 … 19 | TP-01, TP-11, TP-12, TP-13 |
 | Errors | TC-ERR-01 … 05 | TP-14, TP-16, TP-22 |
-| Persistence | TC-DB-01 … 08 | TP-03, TP-04, TP-11, TP-14, TP-15, TP-19, TP-20 |
-| Security unit | TC-SEG-01 … 03 | TP-04 |
+| Persistence | TC-DB-01 … 09 | TP-03, TP-04, TP-11, TP-14, TP-15, TP-19, TP-20 |
+| Security unit | TC-SEG-01 … 05 | TP-04 |
 | Welcome page | TC-HTML-01 … 03 | TP-01, TP-21 |
 | Encoding | TC-ENC-01, TC-E2E-09 | TP-23 |
-| Client E2E | TC-E2E-01 … 09 | TP-17, TP-23, TP-25 |
+| Client E2E | TC-E2E-01 … 12 | TP-17, TP-23, TP-25 |
 | Client limitation | TC-CLI-01 | TP-25 |
 
-**86 cases over 25 test points.** Reverse check: the test points with the most cases are TP-02
-(eleven), TP-12 (eight) and TP-17 (seven). Four test points carry a single case each — TP-06,
+**92 cases over 25 test points.** Reverse check: the test points with the most cases are TP-02
+(eleven), TP-17 (ten) and TP-12 (eight). Four test points carry a single case each — TP-06,
 TP-09, TP-15 and TP-16.
 
 Case count is not a risk ranking, and this distribution is where that shows: TP-02 is `High` while
@@ -313,3 +329,23 @@ Appended, never edited in place — same rule as `docs/decisiones.md` and `docs/
   validated after stripping but stored as typed) and TC-LOG-07 (`contraseña` is never stripped).
   Both come from D-21 and `docs/api.md` §7, and both would be silently "fixed" by a future
   contributor who thought the behaviour was a bug.
+
+### 2026-11-10 — closing the gaps found by the Phase 9 coverage run
+
+- **Six cases added, none outside an existing test point:** TC-DB-09 (TP-20), TC-SEG-04 and
+  TC-SEG-05 (TP-04), TC-E2E-10, TC-E2E-11 and TC-E2E-12 (TP-17). Count recalculated: **92**.
+- **No requirement was added.** Each case covers a rule that already existed in `docs/requisitos.md`
+  or `docs/api.md` but had no test behind it.
+- **TC-HTML-01 … 03 pointed at a file that did not exist.** The catalog has named
+  `tests/test_bienvenida.py` since Phase 1.6; the test was finally written in Phase 9. TP-21 had a
+  case on paper and zero assertions behind it, which is exactly what a traceability matrix is
+  supposed to catch.
+- **TC-DB-09 is the only persistence case that goes through the app.** The suite only ever used
+  `:memory:`, so the file branch of `init_db` and the directory creation in `create_app` — the two
+  things production always executes — were dead code as far as the suite could tell.
+- **TC-HTML-02 changed technique.** It used to scan for a task id; the template contains digits
+  (`initial-scale=1`), so the scan proved nothing. It now compares the rendered bytes before and
+  after data exists.
+- **Not covered, deliberately:** the `if __name__ == "__main__"` lines of `servidor.py` and
+  `cliente.py`. They start a server and call `sys.exit`; the behaviour they hand off is already
+  covered through `create_app` and `principal`.

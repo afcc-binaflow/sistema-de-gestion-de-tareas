@@ -109,6 +109,38 @@ class SesionCaida:
     delete = post
 
 
+class RespuestaQueNoEsJson:
+    """Un 502 de un proxy: status de error y cuerpo HTML."""
+
+    status_code = 502
+
+    def json(self):
+        raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+
+class RespuestaJsonSinCampoError:
+    """Un JSON valido que no sigue el contrato: no trae `error`."""
+
+    status_code = 500
+
+    def json(self):
+        return {"mensaje": "boom"}
+
+
+class SesionQueDevuelve:
+    """Siempre la misma respuesta de error, para fijar como se traduce."""
+
+    def __init__(self, respuesta):
+        self._respuesta = respuesta
+
+    def post(self, url, **kwargs):
+        return self._respuesta
+
+    get = post
+    put = post
+    delete = post
+
+
 class FlujoFalso:
     """Un stdout de mentira: solo registra como se lo reconfiguro."""
 
@@ -252,6 +284,46 @@ def test_api_caida_imprime_una_linea_y_sale_con_codigo_distinto_de_cero():
 
 
 # ---------------------------------------------------------------------------
+# Un error con cuerpo HTML: el cliente no revienta con un JSONDecodeError
+# ---------------------------------------------------------------------------
+def test_un_error_sin_cuerpo_json_da_un_mensaje_honesto():
+    """`_mensaje_de_error` cubre el 502/504 HTML de un proxy por delante.
+
+    Sin este caso, el camino que traduce un cuerpo no parseable queda sin
+    ejecutar y la primera vez que corra sera en produccion, con un traceback en
+    la cara del usuario.
+    """
+    api = cliente.ApiDeTareas(
+        URL_BASE, sesion=SesionQueDevuelve(RespuestaQueNoEsJson())
+    )
+
+    with pytest.raises(cliente.ErrorDeApi) as capturado:
+        api.registrar("juan", "1234")
+
+    assert capturado.value.codigo == 502
+    assert capturado.value.mensaje == "la respuesta no es JSON"
+    assert "\n" not in cliente.formatear_error(capturado.value)
+
+
+def test_un_json_sin_campo_error_no_se_inventa_un_mensaje():
+    """Un JSON valido con otra forma tampoco es un `error` del contrato.
+
+    El cliente no adivina: si no hay `error` string, lo dice. Inventar un texto
+    a partir de otra clave mostraria algo que la API nunca quiso decir.
+    """
+    api = cliente.ApiDeTareas(
+        URL_BASE, sesion=SesionQueDevuelve(RespuestaJsonSinCampoError())
+    )
+
+    with pytest.raises(cliente.ErrorDeApi) as capturado:
+        api.registrar("juan", "1234")
+
+    assert capturado.value.codigo == 500
+    assert capturado.value.mensaje == "la respuesta no trae el campo 'error'"
+    assert "\n" not in cliente.formatear_error(capturado.value)
+
+
+# ---------------------------------------------------------------------------
 # TC-E2E-03: la API responde 400 y 401
 # ---------------------------------------------------------------------------
 def test_400_y_401_dan_una_linea_con_el_status_y_el_error_de_la_api(client):
@@ -369,6 +441,27 @@ def test_principal_fuerza_utf8_en_la_salida(monkeypatch):
     assert flujo.encoding == "utf-8"
 
 
+def test_principal_usa_la_url_del_entorno(monkeypatch):
+    """`PFO2_API_URL` se lee al arrancar y el default solo aplica si falta.
+
+    `principal` es la funcion que corre `python cliente.py`: el argumento del
+    menu es una `ApiDeTareas` ya armada con esa URL. Se intercepta `menu` para no
+    tocar stdin ni la red.
+    """
+    vistas = []
+
+    def menu_falso(api):
+        vistas.append(api.url_base)
+        return 0
+
+    monkeypatch.setattr(cliente, "menu", menu_falso)
+    monkeypatch.setattr(cliente.sys, "stdout", FlujoFalso())
+    monkeypatch.setenv("PFO2_API_URL", "http://otra-api.test")
+
+    assert cliente.principal() == 0
+    assert vistas == ["http://otra-api.test"]
+
+
 # ---------------------------------------------------------------------------
 # El menu: que las opciones hagan lo que dicen
 # ---------------------------------------------------------------------------
@@ -384,6 +477,8 @@ def test_el_menu_recorre_el_ciclo_completo_y_sale_con_cero(client):
             "3",                        # listar
             "5", "1", "Estudiar SQLite", "s",  # editar
             "3",                        # listar de nuevo
+            "5", "1", "Estudiar SQLite", "n",  # desmarcar
+            "3",                        # listar de nuevo
             "6", "1",                   # borrar
             "3",                        # listar vacio
             "7",                        # salir
@@ -393,6 +488,7 @@ def test_el_menu_recorre_el_ciclo_completo_y_sale_con_cero(client):
     assert codigo == 0
     assert "Estudiar SQLite" in salida
     assert "[x] Estudiar SQLite" in salida
+    assert "[ ] Estudiar SQLite" in salida
     assert "No tenés tareas" in salida
     assert "Traceback" not in salida
 
@@ -404,6 +500,22 @@ def test_una_operacion_de_tareas_sin_sesion_avisa_y_no_llama_a_la_api(client):
 
     assert codigo == 0
     assert "iniciá sesión" in salida
+    assert sesion.envios == []
+
+
+def test_crear_editar_y_borrar_sin_sesion_tampoco_llaman_a_la_api(client):
+    """Las tres acciones que escriben tienen el mismo guard que listar.
+
+    Es el mismo `_hay_sesion`, pero cada accion lo invoca por su cuenta: si una
+    se lo olvidara, el usuario veria "primero iniciá sesión" y la llamada saldria
+    igual, con un 401 encima.
+    """
+    api, sesion = _con_sesion_de_prueba(client)
+
+    codigo, salida = _menu(api, ["4", "5", "6", "7"])
+
+    assert codigo == 0
+    assert salida.count("Primero iniciá sesión") == 3
     assert sesion.envios == []
 
 

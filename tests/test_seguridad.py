@@ -46,6 +46,40 @@ def test_verificar_password_correcta_e_incorrecta():
 
 
 # ---------------------------------------------------------------------------
+# TC-SEG-04 (RNF-03): sin SECRET_KEY en el entorno, falla rapido
+# ---------------------------------------------------------------------------
+def test_firmar_sin_secret_key_falla_rapido(monkeypatch):
+    """Sin clave no se firma un token con una clave vacia o adivinable.
+
+    `create_app` ya valida al arrancar, pero `security` se puede importar solo
+    (lo hace el cliente de consola). Si la clave faltara aca, `jwt` firmaria con
+    `None` y el token saldria valido sin que nadie lo note.
+    """
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        crear_token(42)
+
+
+# ---------------------------------------------------------------------------
+# TC-SEG-05 (RNF-03): sin clave explicita, `security` usa la del entorno
+# ---------------------------------------------------------------------------
+def test_sin_clave_explicita_usa_la_del_entorno(monkeypatch):
+    """El modulo de seguridad no conoce Flask: la clave le llega por parametro
+    o por el entorno (routes.py §4.2 pasa la de la app; el cliente de consola
+    importa `security` solo).
+
+    El test fija esa segunda via: si desapareciera, `crear_token(42)` sin clave
+    reventaria en cualquier consumidor que no tenga una app Flask a mano.
+    """
+    monkeypatch.setenv("SECRET_KEY", CLAVE)
+
+    token = crear_token(42)
+
+    assert decodificar_token(token)["sub"] == "42"
+
+
+# ---------------------------------------------------------------------------
 # Token: propio decodifica y trae el sub correcto
 # ---------------------------------------------------------------------------
 def test_token_propio_decodifica_y_trae_sub():

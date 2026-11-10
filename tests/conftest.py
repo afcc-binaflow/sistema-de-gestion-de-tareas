@@ -34,8 +34,15 @@ from servidor import create_app
 
 @pytest.fixture
 def app():
-    """Una app nueva por test, con base en memoria (RNF-12, D-18)."""
-    return create_app(ConfigTest)
+    """Una app nueva por test, con base en memoria (RNF-12, D-18).
+
+    La conexion persistente que abre `init_db` se cierra al terminar el test. Sin
+    ese cierre, SQLite la reporta como `ResourceWarning` cuando el recolector la
+    encuentra viva: cientos de avisos que tapan el que si importa.
+    """
+    aplicacion = create_app(ConfigTest)
+    yield aplicacion
+    aplicacion._db_conexion_persistente.close()
 
 
 @pytest.fixture

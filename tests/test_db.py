@@ -2,13 +2,20 @@
 
 Se ejercitan contra una conexion, no a traves de HTTP: estas propiedades son
 invisibles desde arriba. La base es en memoria y se inicializa por test.
+
+TC-DB-09 es la excepcion y a proposito: la rama de base en archivo solo existe
+en el ciclo de vida de la app (`init_db`), asi que ese caso levanta la app real
+apuntando a un archivo temporal. Sin el, la mitad de `db.py` que corre en
+produccion queda sin ejecutar en la suite.
 """
 
 import sqlite3
 import threading
+from pathlib import Path
 
 import pytest
 
+from config import ConfigTest
 from db import conectar, inicializar
 from repository import (
     borrar_tarea_de,
@@ -18,6 +25,7 @@ from repository import (
     listar_tareas_de,
     obtener_tarea_de,
 )
+from servidor import create_app
 
 
 @pytest.fixture
@@ -135,3 +143,35 @@ def test_concurrencia_sin_corrupcion(tmp_path):
     total = conn.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0]
     conn.close()
     assert total == cantidad
+
+
+# ---------------------------------------------------------------------------
+# TC-DB-09 (TP-20): la base en archivo se crea, persiste y sobrevive requests
+# ---------------------------------------------------------------------------
+def test_la_base_en_archivo_se_crea_y_persiste_entre_peticiones(tmp_path):
+    """La configuracion de produccion usa un archivo, no `:memory:` (D-18).
+
+    El test cubre las tres piezas que solo se ejecutan en ese modo: la carpeta
+    que SQLite no crea (`servidor.create_app`), el esquema inicializado sobre la
+    conexion de una peticion y el cierre por `teardown` (`db.init_db`). Que el
+    login funcione en una **segunda** peticion es lo que prueba que los datos
+    quedaron en disco y no en una conexion que ya se cerro.
+    """
+
+    class ConfigArchivo(ConfigTest):
+        DATABASE = str(tmp_path / "datos" / "pfo2.db")
+
+    assert not Path(ConfigArchivo.DATABASE).exists()
+
+    app = create_app(ConfigArchivo)
+
+    assert Path(ConfigArchivo.DATABASE).exists()
+
+    with app.test_client() as cliente:
+        creado = cliente.post(
+            "/registro", json={"usuario": "juan", "contraseña": "1234"}
+        )
+        assert creado.status_code == 201
+
+        login = cliente.post("/login", json={"usuario": "juan", "contraseña": "1234"})
+        assert login.status_code == 200

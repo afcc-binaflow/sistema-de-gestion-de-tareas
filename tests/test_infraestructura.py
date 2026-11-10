@@ -61,8 +61,14 @@ def test_dos_apps_no_comparten_configuracion():
     una = create_app(ConfigTest)
     otra = create_app(ConfigTestAlternativa)
 
-    assert una.config["SECRET_KEY"] != otra.config["SECRET_KEY"]
-    assert una.config["DATABASE"] == otra.config["DATABASE"]
+    try:
+        assert una.config["SECRET_KEY"] != otra.config["SECRET_KEY"]
+        assert una.config["DATABASE"] == otra.config["DATABASE"]
+    finally:
+        # Las dos apps abrieron su conexion en memoria: se cierran igual que la
+        # fixture `app`, para no dejar `ResourceWarning` sueltos.
+        una._db_conexion_persistente.close()
+        otra._db_conexion_persistente.close()
 
 
 def test_la_app_falla_sin_secret_key(monkeypatch):
